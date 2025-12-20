@@ -60,7 +60,7 @@ export const optimalSetRecommendations: Record<string, { min: string; optimal: s
   "Arms": { min: "6-10", optimal: "12-15", upper: "18-20" },
 };
 
-export type SetCountMode = 'direct' | 'fractional' | 'total';
+export type SetCountMode = 'direct' | 'fractional' | 'touched';
 
 /**
  * Get the set type label for display in status messages
@@ -71,8 +71,8 @@ function getSetTypeLabel(mode: SetCountMode): string {
       return 'direct sets';
     case 'fractional':
       return 'fractional sets';
-    case 'total':
-      return 'total sets';
+    case 'touched':
+      return 'touched sets';
   }
 }
 

@@ -9,12 +9,16 @@ import { View } from 'react-native';
 import { UncategorizedStats, WeeklySetsBreakdown } from '../../utils/analytics/calculateStats';
 import { getCurrentWeek, getVolumeStatus } from '../../utils/helpers';
 
-export type SetCountMode = 'direct' | 'fractional' | 'total';
+export type SetCountMode = 'direct' | 'fractional' | 'touched';
 
 interface MuscleGroupStatsProps {
     stats: Record<string, { 
       totalVolume: number;
+      totalVolumeDirect: number;
+      totalVolumeAllocated: number;
       averageVolume: number;
+      averageVolumeDirect: number;
+      averageVolumeAllocated: number;
       weeklySets: WeeklySetsBreakdown;
     }>;
     uncategorized?: UncategorizedStats;
@@ -23,12 +27,12 @@ interface MuscleGroupStatsProps {
 const MODE_OPTIONS = [
   { label: 'Direct', value: 'direct' },
   { label: 'Fractional', value: 'fractional' },
-  { label: 'Total', value: 'total' },
+  { label: 'Touched', value: 'touched' },
 ];
 
 /**
  * Formats set count for display based on mode.
- * - direct/total: integer display
+ * - direct/touched: integer display
  * - fractional: display with 1 decimal (rounded to nearest 0.5)
  */
 function formatSetCount(count: number, mode: SetCountMode): string {
@@ -48,13 +52,13 @@ const MuscleGroupStats: React.FC<MuscleGroupStatsProps> = ({ stats, uncategorize
     // Find the most recent week that has any data if current week is empty
     const allWeeks = new Set<string>();
     Object.values(stats).forEach(s => {
-      Object.keys(s.weeklySets.total).forEach(w => allWeeks.add(w));
+      Object.keys(s.weeklySets.touched).forEach(w => allWeeks.add(w));
     });
     const sortedWeeks = Array.from(allWeeks).sort().reverse();
     const latestWeekWithData = sortedWeeks[0] || currentWeek;
     
     // Use latest week if current week has no data for any muscle group
-    const hasDataForCurrentWeek = Object.values(stats).some(s => s.weeklySets.total[currentWeek] > 0);
+    const hasDataForCurrentWeek = Object.values(stats).some(s => s.weeklySets.touched[currentWeek] > 0);
     const displayWeek = hasDataForCurrentWeek ? currentWeek : latestWeekWithData;
 
     // Get uncategorized sets for display week

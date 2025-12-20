@@ -1,28 +1,4 @@
-{"location":"server.js:142","message":"/thread endpoint called","data":{"ip":"192.168.5.97","headers":"Expo/1017756 CFNetwork/3860.200.71 Darwin/25.1.0"},"timestamp":1766209225032,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:145","message":"About to call createThread","data":{},"timestamp":1766209225033,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:30","message":"createThread function entry","data":{},"timestamp":1766209225033,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:33","message":"About to call OpenAI threads.create","data":{},"timestamp":1766209225033,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:35","message":"OpenAI threads.create succeeded","data":{"threadId":"thread_SSu3IfJYVStcEALcIYHC7gvk"},"timestamp":1766209225394,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:148","message":"createThread succeeded","data":{"threadId":"thread_SSu3IfJYVStcEALcIYHC7gvk"},"timestamp":1766209225395,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:150","message":"Response sent to client","data":{"threadId":"thread_SSu3IfJYVStcEALcIYHC7gvk"},"timestamp":1766209225395,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:142","message":"/thread endpoint called","data":{"ip":"192.168.5.97","headers":"Expo/1017756 CFNetwork/3860.200.71 Darwin/25.1.0"},"timestamp":1766209251289,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:145","message":"About to call createThread","data":{},"timestamp":1766209251289,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:30","message":"createThread function entry","data":{},"timestamp":1766209251289,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:33","message":"About to call OpenAI threads.create","data":{},"timestamp":1766209251289,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:35","message":"OpenAI threads.create succeeded","data":{"threadId":"thread_PXKVNOZOE0BoSZSvki9cSL0y"},"timestamp":1766209251642,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:148","message":"createThread succeeded","data":{"threadId":"thread_PXKVNOZOE0BoSZSvki9cSL0y"},"timestamp":1766209251642,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:150","message":"Response sent to client","data":{"threadId":"thread_PXKVNOZOE0BoSZSvki9cSL0y"},"timestamp":1766209251643,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:142","message":"/thread endpoint called","data":{"ip":"192.168.5.97","headers":"Expo/1017756 CFNetwork/3860.200.71 Darwin/25.1.0"},"timestamp":1766209838075,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:145","message":"About to call createThread","data":{},"timestamp":1766209838076,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:30","message":"createThread function entry","data":{},"timestamp":1766209838076,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:33","message":"About to call OpenAI threads.create","data":{},"timestamp":1766209838077,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:35","message":"OpenAI threads.create succeeded","data":{"threadId":"thread_Yz0uBXrTSB1EYRDbau9xjSPO"},"timestamp":1766209838452,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:148","message":"createThread succeeded","data":{"threadId":"thread_Yz0uBXrTSB1EYRDbau9xjSPO"},"timestamp":1766209838453,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:150","message":"Response sent to client","data":{"threadId":"thread_Yz0uBXrTSB1EYRDbau9xjSPO"},"timestamp":1766209838453,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:142","message":"/thread endpoint called","data":{"ip":"192.168.5.97","headers":"Expo/1017756 CFNetwork/3860.200.71 Darwin/25.1.0"},"timestamp":1766210019318,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:145","message":"About to call createThread","data":{},"timestamp":1766210019318,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:30","message":"createThread function entry","data":{},"timestamp":1766210019318,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:33","message":"About to call OpenAI threads.create","data":{},"timestamp":1766210019319,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:35","message":"OpenAI threads.create succeeded","data":{"threadId":"thread_2eaIIDtRZapPkhT6fNQvriBn"},"timestamp":1766210019713,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:148","message":"createThread succeeded","data":{"threadId":"thread_2eaIIDtRZapPkhT6fNQvriBn"},"timestamp":1766210019713,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
-{"location":"server.js:150","message":"Response sent to client","data":{"threadId":"thread_2eaIIDtRZapPkhT6fNQvriBn"},"timestamp":1766210019714,"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}
+{"location":"app/(tabs)/_layout.tsx:12","message":"TabsLayout render","data":{"colorScheme":"light","hasNavigationContext":true,"tabRoutes":[]},"timestamp":1766217225633,"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H4"}
+{"location":"app/(tabs)/_layout.tsx:12","message":"TabsLayout render","data":{"colorScheme":"light","hasNavigationContext":true,"tabRoutes":[]},"timestamp":1766217230695,"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H4"}
+{"location":"app/(tabs)/_layout.tsx:12","message":"TabsLayout render","data":{"colorScheme":"dark","hasNavigationContext":true,"tabRoutes":[]},"timestamp":1766217234265,"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H4"}
+{"location":"app/(tabs)/_layout.tsx:12","message":"TabsLayout render","data":{"colorScheme":"dark","hasNavigationContext":true,"tabRoutes":[]},"timestamp":1766217234365,"sessionId":"debug-session","runId":"post-fix","hypothesisId":"H4"}

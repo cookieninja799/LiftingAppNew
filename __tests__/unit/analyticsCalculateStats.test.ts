@@ -169,10 +169,10 @@ describe('calculateStatsFromSessions', () => {
         currentWeek: '2024-W51',
       });
 
-      // Week 51 has Chest exercises: 4 sets + 3 sets = 7 total sets
+      // Week 51 has Chest exercises: 4 sets + 3 sets = 7 touched sets
       // Both exercises have primaryMuscleGroup = 'Chest', so template gives Chest 1.0 direct
       expect(workoutStats.muscleGroupStats['Chest']).toBeDefined();
-      expect(workoutStats.muscleGroupStats['Chest'].weeklySets.total['2024-W51']).toBe(7);
+      expect(workoutStats.muscleGroupStats['Chest'].weeklySets.touched['2024-W51']).toBe(7);
       expect(workoutStats.muscleGroupStats['Chest'].weeklySets.direct['2024-W51']).toBe(7);
       expect(workoutStats.muscleGroupStats['Chest'].weeklySets.fractional['2024-W51']).toBe(7);
     });
@@ -183,9 +183,9 @@ describe('calculateStatsFromSessions', () => {
       });
 
       // Week 50 has Chest: 3 sets
-      expect(workoutStats.muscleGroupStats['Chest'].weeklySets.total['2024-W50']).toBe(3);
+      expect(workoutStats.muscleGroupStats['Chest'].weeklySets.touched['2024-W50']).toBe(3);
       // Week 49 has Quads: 5 sets
-      expect(workoutStats.muscleGroupStats['Quads'].weeklySets.total['2024-W49']).toBe(5);
+      expect(workoutStats.muscleGroupStats['Quads'].weeklySets.touched['2024-W49']).toBe(5);
     });
 
     it('should handle missing muscle groups by tracking as uncategorized', () => {
@@ -221,36 +221,158 @@ describe('calculateStatsFromSessions', () => {
       // Row: 4 sets -> Back direct 4, Arms fractional 2, Shoulders fractional 2
       // Squats: 4 sets -> Quads direct 4, Hamstrings fractional 1
 
-      // Chest: 3 direct, 3 total
+      // Chest: 3 direct, 3 touched
       expect(workoutStats.muscleGroupStats['Chest'].weeklySets.direct['2024-W51']).toBe(3);
       expect(workoutStats.muscleGroupStats['Chest'].weeklySets.fractional['2024-W51']).toBe(3);
-      expect(workoutStats.muscleGroupStats['Chest'].weeklySets.total['2024-W51']).toBe(3);
+      expect(workoutStats.muscleGroupStats['Chest'].weeklySets.touched['2024-W51']).toBe(3);
 
       // Arms: 0 direct (both exercises have arms as secondary), 3.5 fractional (1.5 + 2)
-      // total = 7 (3 from bench + 4 from row)
+      // touched = 7 (3 from bench + 4 from row)
       expect(workoutStats.muscleGroupStats['Arms'].weeklySets.direct['2024-W51']).toBe(0);
       expect(workoutStats.muscleGroupStats['Arms'].weeklySets.fractional['2024-W51']).toBe(3.5);
-      expect(workoutStats.muscleGroupStats['Arms'].weeklySets.total['2024-W51']).toBe(7);
+      expect(workoutStats.muscleGroupStats['Arms'].weeklySets.touched['2024-W51']).toBe(7);
 
-      // Shoulders: 0 direct, 3.5 fractional (1.5 + 2), 7 total
+      // Shoulders: 0 direct, 3.5 fractional (1.5 + 2), 7 touched
       expect(workoutStats.muscleGroupStats['Shoulders'].weeklySets.direct['2024-W51']).toBe(0);
       expect(workoutStats.muscleGroupStats['Shoulders'].weeklySets.fractional['2024-W51']).toBe(3.5);
-      expect(workoutStats.muscleGroupStats['Shoulders'].weeklySets.total['2024-W51']).toBe(7);
+      expect(workoutStats.muscleGroupStats['Shoulders'].weeklySets.touched['2024-W51']).toBe(7);
 
-      // Back: 4 direct, 4 fractional, 4 total
+      // Back: 4 direct, 4 fractional, 4 touched
       expect(workoutStats.muscleGroupStats['Back'].weeklySets.direct['2024-W51']).toBe(4);
       expect(workoutStats.muscleGroupStats['Back'].weeklySets.fractional['2024-W51']).toBe(4);
-      expect(workoutStats.muscleGroupStats['Back'].weeklySets.total['2024-W51']).toBe(4);
+      expect(workoutStats.muscleGroupStats['Back'].weeklySets.touched['2024-W51']).toBe(4);
 
-      // Quads: 4 direct, 4 fractional, 4 total
+      // Quads: 4 direct, 4 fractional, 4 touched
       expect(workoutStats.muscleGroupStats['Quads'].weeklySets.direct['2024-W51']).toBe(4);
       expect(workoutStats.muscleGroupStats['Quads'].weeklySets.fractional['2024-W51']).toBe(4);
-      expect(workoutStats.muscleGroupStats['Quads'].weeklySets.total['2024-W51']).toBe(4);
+      expect(workoutStats.muscleGroupStats['Quads'].weeklySets.touched['2024-W51']).toBe(4);
 
-      // Hamstrings: 0 direct, 1 fractional (4 * 0.25), 4 total
+      // Hamstrings: 0 direct, 1 fractional (4 * 0.25), 4 touched
       expect(workoutStats.muscleGroupStats['Hamstrings'].weeklySets.direct['2024-W51']).toBe(0);
       expect(workoutStats.muscleGroupStats['Hamstrings'].weeklySets.fractional['2024-W51']).toBe(1);
-      expect(workoutStats.muscleGroupStats['Hamstrings'].weeklySets.total['2024-W51']).toBe(4);
+      expect(workoutStats.muscleGroupStats['Hamstrings'].weeklySets.touched['2024-W51']).toBe(4);
+    });
+
+    it('should calculate direct-only volume (literature standard)', () => {
+      const { workoutStats } = calculateStatsFromSessions(fractionalSetsSessions, {
+        currentWeek: '2024-W51',
+      });
+
+      // Bench Press: 3 sets x 135 lbs = 405 lbs per set, total = 1215 lbs (Chest only gets this as direct)
+      // Arms and Shoulders get 0 direct volume from Bench Press (fraction < 1)
+      
+      // Chest should have direct volume > 0
+      expect(workoutStats.muscleGroupStats['Chest'].totalVolumeDirect).toBeGreaterThan(0);
+      
+      // Arms should have 0 direct volume (no exercises where Arms is primary)
+      expect(workoutStats.muscleGroupStats['Arms'].totalVolumeDirect).toBe(0);
+      
+      // Shoulders should have 0 direct volume (no exercises where Shoulders is primary)
+      expect(workoutStats.muscleGroupStats['Shoulders'].totalVolumeDirect).toBe(0);
+      
+      // Back should have direct volume from Row
+      expect(workoutStats.muscleGroupStats['Back'].totalVolumeDirect).toBeGreaterThan(0);
+      
+      // Quads should have direct volume from Squats
+      expect(workoutStats.muscleGroupStats['Quads'].totalVolumeDirect).toBeGreaterThan(0);
+      
+      // Hamstrings should have 0 direct volume (only gets secondary contribution from Squats)
+      expect(workoutStats.muscleGroupStats['Hamstrings'].totalVolumeDirect).toBe(0);
+    });
+
+    it('should calculate allocated volume (fraction-weighted)', () => {
+      const { workoutStats } = calculateStatsFromSessions(fractionalSetsSessions, {
+        currentWeek: '2024-W51',
+      });
+
+      // All muscle groups should have allocated volume > 0 if they're involved
+      expect(workoutStats.muscleGroupStats['Chest'].totalVolumeAllocated).toBeGreaterThan(0);
+      expect(workoutStats.muscleGroupStats['Arms'].totalVolumeAllocated).toBeGreaterThan(0);
+      expect(workoutStats.muscleGroupStats['Shoulders'].totalVolumeAllocated).toBeGreaterThan(0);
+      expect(workoutStats.muscleGroupStats['Back'].totalVolumeAllocated).toBeGreaterThan(0);
+      expect(workoutStats.muscleGroupStats['Quads'].totalVolumeAllocated).toBeGreaterThan(0);
+      expect(workoutStats.muscleGroupStats['Hamstrings'].totalVolumeAllocated).toBeGreaterThan(0);
+      
+      // For primary muscles, direct volume should equal allocated volume
+      expect(workoutStats.muscleGroupStats['Chest'].totalVolumeDirect).toBe(
+        workoutStats.muscleGroupStats['Chest'].totalVolumeAllocated
+      );
+      expect(workoutStats.muscleGroupStats['Back'].totalVolumeDirect).toBe(
+        workoutStats.muscleGroupStats['Back'].totalVolumeAllocated
+      );
+      expect(workoutStats.muscleGroupStats['Quads'].totalVolumeDirect).toBe(
+        workoutStats.muscleGroupStats['Quads'].totalVolumeAllocated
+      );
+      
+      // For secondary muscles, allocated volume > direct volume (direct = 0)
+      expect(workoutStats.muscleGroupStats['Arms'].totalVolumeAllocated).toBeGreaterThan(
+        workoutStats.muscleGroupStats['Arms'].totalVolumeDirect
+      );
+      expect(workoutStats.muscleGroupStats['Shoulders'].totalVolumeAllocated).toBeGreaterThan(
+        workoutStats.muscleGroupStats['Shoulders'].totalVolumeDirect
+      );
+      expect(workoutStats.muscleGroupStats['Hamstrings'].totalVolumeAllocated).toBeGreaterThan(
+        workoutStats.muscleGroupStats['Hamstrings'].totalVolumeDirect
+      );
+    });
+
+    it('should calculate average volumes correctly', () => {
+      const { workoutStats } = calculateStatsFromSessions(fractionalSetsSessions, {
+        currentWeek: '2024-W51',
+      });
+
+      // All muscle groups should have average volumes
+      expect(workoutStats.muscleGroupStats['Chest'].averageVolumeDirect).toBeGreaterThan(0);
+      expect(workoutStats.muscleGroupStats['Chest'].averageVolumeAllocated).toBeGreaterThan(0);
+      
+      // For primary muscles, average direct = average allocated
+      expect(workoutStats.muscleGroupStats['Chest'].averageVolumeDirect).toBe(
+        workoutStats.muscleGroupStats['Chest'].averageVolumeAllocated
+      );
+      
+      // For secondary muscles, average allocated > average direct (direct = 0)
+      expect(workoutStats.muscleGroupStats['Arms'].averageVolumeDirect).toBe(0);
+      expect(workoutStats.muscleGroupStats['Arms'].averageVolumeAllocated).toBeGreaterThan(0);
+    });
+
+    it('should not count secondary muscle volume as direct volume', () => {
+      // Create a session with just Bench Press to verify volume calculations
+      const benchOnlySessions = [
+        {
+          id: 'session-1',
+          date: '2024-12-18',
+          exercises: [
+            {
+              id: 'ex-1',
+              exercise: 'Bench Press',
+              sets: 3,
+              reps: [5, 5, 5],
+              weights: ['135', '135', '135'],
+              primaryMuscleGroup: 'Chest',
+            },
+          ],
+        },
+      ];
+
+      const { workoutStats } = calculateStatsFromSessions(benchOnlySessions, {
+        currentWeek: '2024-W51',
+      });
+
+      // Chest gets full volume as direct (primary muscle)
+      const chestDirectVolume = workoutStats.muscleGroupStats['Chest'].totalVolumeDirect;
+      expect(chestDirectVolume).toBeGreaterThan(0);
+      
+      // Arms get allocated volume but 0 direct volume
+      const armsDirectVolume = workoutStats.muscleGroupStats['Arms'].totalVolumeDirect;
+      const armsAllocatedVolume = workoutStats.muscleGroupStats['Arms'].totalVolumeAllocated;
+      expect(armsDirectVolume).toBe(0);
+      expect(armsAllocatedVolume).toBeGreaterThan(0);
+      
+      // Arms allocated should be less than Chest direct (Arms only gets 0.5 fraction)
+      expect(armsAllocatedVolume).toBeLessThan(chestDirectVolume);
+      
+      // Arms allocated should be approximately 50% of Chest direct (0.5 fraction)
+      expect(armsAllocatedVolume).toBeCloseTo(chestDirectVolume * 0.5, 0);
     });
   });
 });

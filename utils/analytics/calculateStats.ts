@@ -8,12 +8,16 @@ import { ensureMuscleContributions } from './muscleContributions';
 export interface WeeklySetsBreakdown {
   direct: Record<string, number>;
   fractional: Record<string, number>;
-  total: Record<string, number>;
+  touched: Record<string, number>;
 }
 
 export interface MuscleGroupStat {
   totalVolume: number;
+  totalVolumeDirect: number;
+  totalVolumeAllocated: number;
   averageVolume: number;
+  averageVolumeDirect: number;
+  averageVolumeAllocated: number;
   weeklySets: WeeklySetsBreakdown;
 }
 
@@ -64,16 +68,18 @@ export function calculateStatsFromSessions(
   let totalExercises = 0;
   let totalSets = 0;
 
-  // Track weekly muscle group data with direct/fractional/total breakdown
+  // Track weekly muscle group data with direct/fractional/touched breakdown
   const weeklyMuscleGroupStats: Record<
     string,
     Record<string, {
       totalVolume: number;
+      totalVolumeDirect: number;
+      totalVolumeAllocated: number;
       sessionCount: number;
       weeklySets: {
         direct: number;
         fractional: number;
-        total: number;
+        touched: number;
       };
     }>
   > = {};
@@ -128,11 +134,13 @@ export function calculateStatsFromSessions(
           if (!weeklyMuscleGroupStats[week][muscleGroup]) {
             weeklyMuscleGroupStats[week][muscleGroup] = {
               totalVolume: 0,
+              totalVolumeDirect: 0,
+              totalVolumeAllocated: 0,
               sessionCount: 0,
               weeklySets: {
                 direct: 0,
                 fractional: 0,
-                total: 0,
+                touched: 0,
               },
             };
           }
@@ -146,10 +154,15 @@ export function calculateStatsFromSessions(
           
           stats.weeklySets.fractional += fractionalSets;
           stats.weeklySets.direct += directSets;
-          stats.weeklySets.total += ex.sets;
+          stats.weeklySets.touched += ex.sets;
           
-          // Track volume (weighted by fraction for accurate volume tracking)
+          // Track volume
+          // totalVolume: legacy field, keep as allocated for backward compatibility
           stats.totalVolume += exerciseVolume * contrib.fraction;
+          // totalVolumeDirect: direct-only tonnage (literature standard for volume)
+          stats.totalVolumeDirect += isDirect ? exerciseVolume : 0;
+          // totalVolumeAllocated: fraction-weighted tonnage (for secondary muscle work)
+          stats.totalVolumeAllocated += exerciseVolume * contrib.fraction;
           
           // Increment session count only once per session per muscle group
           if (!seenGroupsInSession.has(muscleGroup)) {
@@ -169,12 +182,16 @@ export function calculateStatsFromSessions(
     Object.keys(weeklyMuscleGroupStats[week]).forEach(group => {
       if (!muscleGroupStats[group]) {
         muscleGroupStats[group] = { 
-          totalVolume: 0, 
-          averageVolume: 0, 
+          totalVolume: 0,
+          totalVolumeDirect: 0,
+          totalVolumeAllocated: 0,
+          averageVolume: 0,
+          averageVolumeDirect: 0,
+          averageVolumeAllocated: 0,
           weeklySets: {
             direct: {},
             fractional: {},
-            total: {},
+            touched: {},
           },
         };
       }
@@ -185,9 +202,11 @@ export function calculateStatsFromSessions(
       const weekStats = weeklyMuscleGroupStats[week][group];
 
       muscleGroupStats[group].totalVolume += weekStats.totalVolume;
+      muscleGroupStats[group].totalVolumeDirect += weekStats.totalVolumeDirect;
+      muscleGroupStats[group].totalVolumeAllocated += weekStats.totalVolumeAllocated;
       muscleGroupStats[group].weeklySets.direct[week] = weekStats.weeklySets.direct;
       muscleGroupStats[group].weeklySets.fractional[week] = weekStats.weeklySets.fractional;
-      muscleGroupStats[group].weeklySets.total[week] = weekStats.weeklySets.total;
+      muscleGroupStats[group].weeklySets.touched[week] = weekStats.weeklySets.touched;
       totalSessionCounts[group] += weekStats.sessionCount;
     });
   });
@@ -195,10 +214,18 @@ export function calculateStatsFromSessions(
   // Compute average volume per session (overall average)
   Object.keys(muscleGroupStats).forEach(group => {
     const totalVolume = muscleGroupStats[group].totalVolume;
+    const totalVolumeDirect = muscleGroupStats[group].totalVolumeDirect;
+    const totalVolumeAllocated = muscleGroupStats[group].totalVolumeAllocated;
     const numSessions = totalSessionCounts[group];
 
     muscleGroupStats[group].averageVolume = numSessions > 0
       ? totalVolume / numSessions
+      : 0;
+    muscleGroupStats[group].averageVolumeDirect = numSessions > 0
+      ? totalVolumeDirect / numSessions
+      : 0;
+    muscleGroupStats[group].averageVolumeAllocated = numSessions > 0
+      ? totalVolumeAllocated / numSessions
       : 0;
   });
 
