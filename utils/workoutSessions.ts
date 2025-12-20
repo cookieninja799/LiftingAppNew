@@ -3,6 +3,12 @@
 
 import { IdFactory, ParsedExercise, defaultIdFactory } from './assistantParsing';
 
+export type MuscleContribution = {
+  muscleGroup: string;
+  fraction: number;
+  isDirect?: boolean;
+};
+
 export type Exercise = {
   id: string;
   exercise: string;
@@ -10,6 +16,7 @@ export type Exercise = {
   reps: number[];
   weights: string[];
   primaryMuscleGroup?: string;
+  muscleContributions?: MuscleContribution[];
 };
 
 export type WorkoutSession = {
@@ -55,6 +62,7 @@ export function mergeExercisesIntoSessions(
       reps: parsedResult.reps || [],
       weights: parsedResult.weights || [],
       primaryMuscleGroup: parsedResult.primaryMuscleGroup,
+      muscleContributions: parsedResult.muscleContributions,
     };
 
     const existingSessionIndex = updatedSessions.findIndex(

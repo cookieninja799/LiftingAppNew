@@ -5,11 +5,12 @@ import {
 } from '../../utils/analytics/calculateStats';
 import {
     emptySessions,
+    fractionalSetsSessions,
     getTestCurrentWeek,
     multipleSessions,
     multiWeekSessions,
-    sessionsWithMissingMuscleGroup,
     singleSession,
+    uncategorizedExercisesSessions
 } from '../fixtures/sessions';
 
 // Mock the helpers module to control bodyweight
@@ -163,14 +164,17 @@ describe('calculateStatsFromSessions', () => {
   });
 
   describe('muscleGroupStats', () => {
-    it('should calculate weekly sets for muscle groups', () => {
+    it('should calculate weekly sets for muscle groups with direct/fractional/total breakdown', () => {
       const { workoutStats } = calculateStatsFromSessions(multiWeekSessions, {
         currentWeek: '2024-W51',
       });
 
-      // Week 51 has Chest exercises: 4 sets + 3 sets = 7 sets
+      // Week 51 has Chest exercises: 4 sets + 3 sets = 7 total sets
+      // Both exercises have primaryMuscleGroup = 'Chest', so template gives Chest 1.0 direct
       expect(workoutStats.muscleGroupStats['Chest']).toBeDefined();
-      expect(workoutStats.muscleGroupStats['Chest'].weeklySets['2024-W51']).toBe(7);
+      expect(workoutStats.muscleGroupStats['Chest'].weeklySets.total['2024-W51']).toBe(7);
+      expect(workoutStats.muscleGroupStats['Chest'].weeklySets.direct['2024-W51']).toBe(7);
+      expect(workoutStats.muscleGroupStats['Chest'].weeklySets.fractional['2024-W51']).toBe(7);
     });
 
     it('should track sets from different weeks separately', () => {
@@ -179,19 +183,23 @@ describe('calculateStatsFromSessions', () => {
       });
 
       // Week 50 has Chest: 3 sets
-      expect(workoutStats.muscleGroupStats['Chest'].weeklySets['2024-W50']).toBe(3);
+      expect(workoutStats.muscleGroupStats['Chest'].weeklySets.total['2024-W50']).toBe(3);
       // Week 49 has Quads: 5 sets
-      expect(workoutStats.muscleGroupStats['Quads'].weeklySets['2024-W49']).toBe(5);
+      expect(workoutStats.muscleGroupStats['Quads'].weeklySets.total['2024-W49']).toBe(5);
     });
 
-    it('should handle missing muscle groups gracefully', () => {
+    it('should handle missing muscle groups by tracking as uncategorized', () => {
       const { workoutStats } = calculateStatsFromSessions(
-        sessionsWithMissingMuscleGroup,
+        uncategorizedExercisesSessions,
         { currentWeek }
       );
 
-      // Should create an "Unknown" muscle group entry
-      expect(workoutStats.muscleGroupStats['Unknown']).toBeDefined();
+      // Should NOT create an "Unknown" muscle group entry
+      expect(workoutStats.muscleGroupStats['Unknown']).toBeUndefined();
+      // Should track uncategorized sets
+      expect(workoutStats.uncategorized.weeklySets['2024-W51']).toBe(3); // Mystery Machine has 3 sets
+      expect(workoutStats.uncategorized.weeklyExerciseCount['2024-W51']).toBe(1);
+      // Chest should still be tracked normally
       expect(workoutStats.muscleGroupStats['Chest']).toBeDefined();
     });
 
@@ -202,6 +210,47 @@ describe('calculateStatsFromSessions', () => {
 
       // Chest has 2 exercises (sessions) in week 51
       expect(workoutStats.muscleGroupStats['Chest'].averageVolume).toBeGreaterThan(0);
+    });
+
+    it('should calculate fractional sets from templates (Bench Press)', () => {
+      const { workoutStats } = calculateStatsFromSessions(fractionalSetsSessions, {
+        currentWeek: '2024-W51',
+      });
+
+      // Bench Press: 3 sets -> Chest direct 3, Arms fractional 1.5, Shoulders fractional 1.5
+      // Row: 4 sets -> Back direct 4, Arms fractional 2, Shoulders fractional 2
+      // Squats: 4 sets -> Quads direct 4, Hamstrings fractional 1
+
+      // Chest: 3 direct, 3 total
+      expect(workoutStats.muscleGroupStats['Chest'].weeklySets.direct['2024-W51']).toBe(3);
+      expect(workoutStats.muscleGroupStats['Chest'].weeklySets.fractional['2024-W51']).toBe(3);
+      expect(workoutStats.muscleGroupStats['Chest'].weeklySets.total['2024-W51']).toBe(3);
+
+      // Arms: 0 direct (both exercises have arms as secondary), 3.5 fractional (1.5 + 2)
+      // total = 7 (3 from bench + 4 from row)
+      expect(workoutStats.muscleGroupStats['Arms'].weeklySets.direct['2024-W51']).toBe(0);
+      expect(workoutStats.muscleGroupStats['Arms'].weeklySets.fractional['2024-W51']).toBe(3.5);
+      expect(workoutStats.muscleGroupStats['Arms'].weeklySets.total['2024-W51']).toBe(7);
+
+      // Shoulders: 0 direct, 3.5 fractional (1.5 + 2), 7 total
+      expect(workoutStats.muscleGroupStats['Shoulders'].weeklySets.direct['2024-W51']).toBe(0);
+      expect(workoutStats.muscleGroupStats['Shoulders'].weeklySets.fractional['2024-W51']).toBe(3.5);
+      expect(workoutStats.muscleGroupStats['Shoulders'].weeklySets.total['2024-W51']).toBe(7);
+
+      // Back: 4 direct, 4 fractional, 4 total
+      expect(workoutStats.muscleGroupStats['Back'].weeklySets.direct['2024-W51']).toBe(4);
+      expect(workoutStats.muscleGroupStats['Back'].weeklySets.fractional['2024-W51']).toBe(4);
+      expect(workoutStats.muscleGroupStats['Back'].weeklySets.total['2024-W51']).toBe(4);
+
+      // Quads: 4 direct, 4 fractional, 4 total
+      expect(workoutStats.muscleGroupStats['Quads'].weeklySets.direct['2024-W51']).toBe(4);
+      expect(workoutStats.muscleGroupStats['Quads'].weeklySets.fractional['2024-W51']).toBe(4);
+      expect(workoutStats.muscleGroupStats['Quads'].weeklySets.total['2024-W51']).toBe(4);
+
+      // Hamstrings: 0 direct, 1 fractional (4 * 0.25), 4 total
+      expect(workoutStats.muscleGroupStats['Hamstrings'].weeklySets.direct['2024-W51']).toBe(0);
+      expect(workoutStats.muscleGroupStats['Hamstrings'].weeklySets.fractional['2024-W51']).toBe(1);
+      expect(workoutStats.muscleGroupStats['Hamstrings'].weeklySets.total['2024-W51']).toBe(4);
     });
   });
 });
@@ -215,5 +264,8 @@ describe('getEmptyStats', () => {
     expect(stats.averageExercisesPerDay).toBe(0);
     expect(stats.averageSetsPerDay).toBe(0);
     expect(Object.keys(stats.muscleGroupStats)).toHaveLength(0);
+    expect(stats.uncategorized).toBeDefined();
+    expect(Object.keys(stats.uncategorized.weeklySets)).toHaveLength(0);
+    expect(Object.keys(stats.uncategorized.weeklyExerciseCount)).toHaveLength(0);
   });
 });

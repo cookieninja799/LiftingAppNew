@@ -266,3 +266,44 @@ export const nonTextMessagePayload: AssistantResponse = {
     ],
   ],
 };
+
+/**
+ * Payload with muscleContributions - tests new fractional set parsing
+ */
+export const payloadWithMuscleContributions: AssistantResponse = {
+  messages: [
+    [
+      {
+        type: 'text',
+        text: {
+          value: JSON.stringify([
+            {
+              exercise: 'Custom Compound Press',
+              sets: 4,
+              reps: [10, 10, 8, 8],
+              weights: ['135', '145', '155', '155'],
+              primaryMuscleGroup: 'Chest',
+              date: '2024-12-18',
+              muscleContributions: [
+                { muscleGroup: 'Chest', fraction: 1, isDirect: true },
+                { muscleGroup: 'Arms', fraction: 0.5 },
+                { muscleGroup: 'Shoulders', fraction: 0.5 },
+              ],
+            },
+            {
+              exercise: 'Isolation Curl',
+              sets: 3,
+              reps: [12, 10, 8],
+              weights: ['25', '30', '35'],
+              primaryMuscleGroup: 'Arms',
+              date: '2024-12-18',
+              muscleContributions: [
+                { muscleGroup: 'Arms', fraction: 1, isDirect: true },
+              ],
+            },
+          ]),
+        },
+      },
+    ],
+  ],
+};

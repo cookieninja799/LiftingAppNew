@@ -250,6 +250,68 @@ describe('mergeExercisesIntoSessions', () => {
     expect(Array.isArray(exercise.reps)).toBe(true);
     expect(Array.isArray(exercise.weights)).toBe(true);
   });
+
+  it('should preserve muscleContributions when present', () => {
+    const parsedExercises: ParsedExercise[] = [
+      {
+        id: 'ex-1',
+        date: '2024-12-18',
+        exercise: 'Custom Press',
+        sets: 3,
+        reps: [10, 8, 6],
+        weights: ['135', '155', '175'],
+        primaryMuscleGroup: 'Chest',
+        muscleContributions: [
+          { muscleGroup: 'Chest', fraction: 1, isDirect: true },
+          { muscleGroup: 'Arms', fraction: 0.5 },
+          { muscleGroup: 'Shoulders', fraction: 0.5 },
+        ],
+      },
+    ];
+
+    const result = mergeExercisesIntoSessions([], parsedExercises, {
+      sessionIdFactory: testSessionIdFactory,
+    });
+
+    const exercise = result[0].exercises[0];
+    expect(exercise.muscleContributions).toBeDefined();
+    expect(exercise.muscleContributions).toHaveLength(3);
+    expect(exercise.muscleContributions![0]).toMatchObject({
+      muscleGroup: 'Chest',
+      fraction: 1,
+      isDirect: true,
+    });
+    expect(exercise.muscleContributions![1]).toMatchObject({
+      muscleGroup: 'Arms',
+      fraction: 0.5,
+    });
+    expect(exercise.muscleContributions![2]).toMatchObject({
+      muscleGroup: 'Shoulders',
+      fraction: 0.5,
+    });
+  });
+
+  it('should handle undefined muscleContributions', () => {
+    const parsedExercises: ParsedExercise[] = [
+      {
+        id: 'ex-1',
+        date: '2024-12-18',
+        exercise: 'Bench Press',
+        sets: 3,
+        reps: [10, 8, 6],
+        weights: ['135', '155', '175'],
+        primaryMuscleGroup: 'Chest',
+        // muscleContributions is undefined
+      },
+    ];
+
+    const result = mergeExercisesIntoSessions([], parsedExercises, {
+      sessionIdFactory: testSessionIdFactory,
+    });
+
+    const exercise = result[0].exercises[0];
+    expect(exercise.muscleContributions).toBeUndefined();
+  });
 });
 
 describe('sortSessionsByDateDesc', () => {

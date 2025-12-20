@@ -1,6 +1,12 @@
 // utils/assistantParsing.ts
 // Extracted parsing logic from RecordWorkout.tsx for testability
 
+export type MuscleContribution = {
+  muscleGroup: string;
+  fraction: number;
+  isDirect?: boolean;
+};
+
 export type ParsedExercise = {
   id: string;
   date: string;
@@ -9,6 +15,7 @@ export type ParsedExercise = {
   reps: number[];
   weights: string[];
   primaryMuscleGroup?: string;
+  muscleContributions?: MuscleContribution[];
 };
 
 export type AssistantMessage = {
@@ -145,6 +152,7 @@ function normalizeExercise(
     reps: Array.isArray(exercise.reps) ? exercise.reps : [],
     weights: Array.isArray(exercise.weights) ? exercise.weights : [],
     primaryMuscleGroup: exercise.primaryMuscleGroup,
+    muscleContributions: Array.isArray(exercise.muscleContributions) ? exercise.muscleContributions : undefined,
   };
 }
 

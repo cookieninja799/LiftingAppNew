@@ -24,6 +24,12 @@ import { Text } from '@/components/ui/text';
 import { getApiBaseUrl } from '@/utils/helpers';
 import { Exercise, WorkoutSession } from '@/utils/workoutSessions';
 
+type MuscleContribution = {
+  muscleGroup: string;
+  fraction: number;
+  isDirect?: boolean;
+};
+
 type ParsedExercise = {
   id: string;
   date?: string;
@@ -32,6 +38,7 @@ type ParsedExercise = {
   reps?: number[];
   weights?: string[];
   primaryMuscleGroup?: string;
+  muscleContributions?: MuscleContribution[];
 };
 
 export default function RecordWorkout() {
@@ -136,6 +143,7 @@ export default function RecordWorkout() {
                 reps: Array.isArray(exercise.reps) ? exercise.reps : [],
                 weights: Array.isArray(exercise.weights) ? exercise.weights : [],
                 primaryMuscleGroup: exercise.primaryMuscleGroup,
+                muscleContributions: Array.isArray(exercise.muscleContributions) ? exercise.muscleContributions : undefined,
               });
             });
           } else if (parsed.exercises && Array.isArray(parsed.exercises)) {
@@ -148,6 +156,7 @@ export default function RecordWorkout() {
                 reps: Array.isArray(exercise.reps) ? exercise.reps : [],
                 weights: Array.isArray(exercise.weights) ? exercise.weights : [],
                 primaryMuscleGroup: exercise.primaryMuscleGroup,
+                muscleContributions: Array.isArray(exercise.muscleContributions) ? exercise.muscleContributions : undefined,
               });
             });
           } else {
@@ -159,6 +168,7 @@ export default function RecordWorkout() {
               reps: Array.isArray(parsed.reps) ? parsed.reps : [],
               weights: Array.isArray(parsed.weights) ? parsed.weights : [],
               primaryMuscleGroup: parsed.primaryMuscleGroup,
+              muscleContributions: Array.isArray(parsed.muscleContributions) ? parsed.muscleContributions : undefined,
             });
           }
         } catch (error) {
@@ -196,6 +206,7 @@ export default function RecordWorkout() {
           reps: parsedResult.reps || [],
           weights: parsedResult.weights || [],
           primaryMuscleGroup: parsedResult.primaryMuscleGroup,
+          muscleContributions: parsedResult.muscleContributions,
         };
 
         const existingSessionIndex = updatedSessions.findIndex(session => session.date === sessionDate);

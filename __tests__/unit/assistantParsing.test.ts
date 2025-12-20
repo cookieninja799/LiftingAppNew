@@ -12,6 +12,7 @@ import {
     nonTextMessagePayload,
     nullMessagesPayload,
     objectWithExercisesPayload,
+    payloadWithMuscleContributions,
     payloadWithProse,
     singleExercisePayload,
     standardArrayPayload,
@@ -210,5 +211,55 @@ describe('parseAssistantResponse (convenience function)', () => {
   it('should handle empty payload', () => {
     const exercises = parseAssistantResponse(emptyPayload);
     expect(exercises).toHaveLength(0);
+  });
+});
+
+describe('muscleContributions parsing', () => {
+  it('should preserve muscleContributions when present in payload', () => {
+    const exercises = parseAssistantResponse(payloadWithMuscleContributions, {
+      idFactory: testIdFactory,
+      dateFactory: testDateFactory,
+    });
+
+    expect(exercises).toHaveLength(2);
+    
+    // First exercise should have muscleContributions
+    expect(exercises[0].exercise).toBe('Custom Compound Press');
+    expect(exercises[0].muscleContributions).toBeDefined();
+    expect(exercises[0].muscleContributions).toHaveLength(3);
+    expect(exercises[0].muscleContributions![0]).toMatchObject({
+      muscleGroup: 'Chest',
+      fraction: 1,
+      isDirect: true,
+    });
+    expect(exercises[0].muscleContributions![1]).toMatchObject({
+      muscleGroup: 'Arms',
+      fraction: 0.5,
+    });
+    expect(exercises[0].muscleContributions![2]).toMatchObject({
+      muscleGroup: 'Shoulders',
+      fraction: 0.5,
+    });
+
+    // Second exercise should have muscleContributions
+    expect(exercises[1].exercise).toBe('Isolation Curl');
+    expect(exercises[1].muscleContributions).toBeDefined();
+    expect(exercises[1].muscleContributions).toHaveLength(1);
+    expect(exercises[1].muscleContributions![0]).toMatchObject({
+      muscleGroup: 'Arms',
+      fraction: 1,
+      isDirect: true,
+    });
+  });
+
+  it('should return undefined muscleContributions for payloads without it', () => {
+    const exercises = parseAssistantResponse(standardArrayPayload, {
+      idFactory: testIdFactory,
+      dateFactory: testDateFactory,
+    });
+
+    expect(exercises).toHaveLength(2);
+    expect(exercises[0].muscleContributions).toBeUndefined();
+    expect(exercises[1].muscleContributions).toBeUndefined();
   });
 });

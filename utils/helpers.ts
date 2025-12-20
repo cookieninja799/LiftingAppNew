@@ -60,10 +60,32 @@ export const optimalSetRecommendations: Record<string, { min: string; optimal: s
   "Arms": { min: "6-10", optimal: "12-15", upper: "18-20" },
 };
 
-export const getVolumeStatus = (muscleGroup: string, totalWeeklySets: number): string => {
+export type SetCountMode = 'direct' | 'fractional' | 'total';
+
+/**
+ * Get the set type label for display in status messages
+ */
+function getSetTypeLabel(mode: SetCountMode): string {
+  switch (mode) {
+    case 'direct':
+      return 'direct sets';
+    case 'fractional':
+      return 'fractional sets';
+    case 'total':
+      return 'total sets';
+  }
+}
+
+export const getVolumeStatus = (
+  muscleGroup: string, 
+  totalWeeklySets: number,
+  mode: SetCountMode = 'fractional'
+): string => {
   const guideline = optimalSetRecommendations[muscleGroup];
+  const setTypeLabel = getSetTypeLabel(mode);
+  
   if (totalWeeklySets === 0)
-    return "😴 No gains: Time to rise and shine in the gym! Add at least a few sets.";
+    return `😴 No gains: Time to rise and shine in the gym! Add at least a few ${setTypeLabel}.`;
   if (!guideline) return "No Guideline";
 
   // Parse the guideline boundaries 
@@ -72,28 +94,31 @@ export const getVolumeStatus = (muscleGroup: string, totalWeeklySets: number): s
   const optimalMax = parseInt(guideline.optimal.split('-')[1]);
   const maxSets = parseInt(guideline.upper.split('-')[0]);
 
-  if (totalWeeklySets < minSets) {
-    const diff = minSets - totalWeeklySets;
-    return `😬 Too Low: Your muscles are snoozing—pump up the volume! Add ${diff} set${diff > 1 ? 's' : ''} to reach the minimum effective range.`;
-  } else if (totalWeeklySets === minSets) {
-    const diff = optimalMin - totalWeeklySets;
-    return `👍 Minimum reached: Welcome to the gains club! Add ${diff} more set${diff > 1 ? 's' : ''} to hit the lower optimal threshold.`;
-  } else if (totalWeeklySets > minSets && totalWeeklySets < optimalMin) {
-    const diff = optimalMin - totalWeeklySets;
-    return `🚀 Almost there: Just ${diff} more set${diff > 1 ? 's' : ''} and you'll be flexin' like a pro!`;
-  } else if (totalWeeklySets === optimalMin) {
-    const diff = optimalMax - totalWeeklySets;
-    return `🎉 Lower optimal reached: Your gains are getting serious! Add ${diff} more set${diff > 1 ? 's' : ''} for maximum benefits.`;
-  } else if (totalWeeklySets > optimalMin && totalWeeklySets < optimalMax) {
-    return "💪 Optimal: Gains on point—keep rocking those weights!";
-  } else if (totalWeeklySets === optimalMax) {
-    return "🎊 Upper optimal reached: Maximum gains unlocked! You're right on target.";
-  } else if (totalWeeklySets > optimalMax && totalWeeklySets <= maxSets) {
-    const diff = totalWeeklySets - optimalMax;
-    return `😎 Overachiever: Crushing it, but maybe ease off by ${diff} set${diff > 1 ? 's' : ''} to stay in the optimal zone.`;
+  // For fractional mode, use rounded values for comparison but show decimals in messages
+  const roundedSets = Math.round(totalWeeklySets * 10) / 10;
+
+  if (roundedSets < minSets) {
+    const diff = Math.round((minSets - roundedSets) * 10) / 10;
+    return `😬 Too Low: Your muscles are snoozing—pump up the volume! Add ${diff} ${setTypeLabel} to reach the minimum effective range.`;
+  } else if (roundedSets >= minSets && roundedSets < minSets + 0.5) {
+    const diff = Math.round((optimalMin - roundedSets) * 10) / 10;
+    return `👍 Minimum reached: Welcome to the gains club! Add ${diff} more ${setTypeLabel} to hit the lower optimal threshold.`;
+  } else if (roundedSets > minSets && roundedSets < optimalMin) {
+    const diff = Math.round((optimalMin - roundedSets) * 10) / 10;
+    return `🚀 Almost there: Just ${diff} more ${setTypeLabel} and you'll be flexin' like a pro!`;
+  } else if (roundedSets >= optimalMin && roundedSets < optimalMin + 0.5) {
+    const diff = Math.round((optimalMax - roundedSets) * 10) / 10;
+    return `🎉 Lower optimal reached: Your gains are getting serious! Add ${diff} more ${setTypeLabel} for maximum benefits.`;
+  } else if (roundedSets > optimalMin && roundedSets < optimalMax) {
+    return `💪 Optimal: Gains on point—keep rocking those ${setTypeLabel}!`;
+  } else if (roundedSets >= optimalMax && roundedSets < optimalMax + 0.5) {
+    return `🎊 Upper optimal reached: Maximum gains unlocked! You're right on target with your ${setTypeLabel}.`;
+  } else if (roundedSets > optimalMax && roundedSets <= maxSets) {
+    const diff = Math.round((roundedSets - optimalMax) * 10) / 10;
+    return `😎 Overachiever: Crushing it, but maybe ease off by ${diff} ${setTypeLabel} to stay in the optimal zone.`;
   } else {
-    const diff = totalWeeklySets - maxSets;
-    return `⚠️ Danger: Overtraining detected! Reduce by ${diff} set${diff > 1 ? 's' : ''} to get back to safe territory.`;
+    const diff = Math.round((roundedSets - maxSets) * 10) / 10;
+    return `⚠️ Danger: Overtraining detected! Reduce by ${diff} ${setTypeLabel} to get back to safe territory.`;
   }
 };
 
@@ -124,11 +149,29 @@ export const computeVolumeForExercise = (exercise: { exercise: string; sets: num
   return volume;
 };
 
-export const getColorForTotalSets = (totalSets: number): string => {
-  if (totalSets >= 20) return '#FF5722';
-  if (totalSets >= 15) return '#FF8A65';
-  if (totalSets >= 10) return '#FFCCBC';
-  return '#eee';
+export const getColorForTotalSets = (
+  totalSets: number,
+  maxTotalSets: number,
+  scheme: 'light' | 'dark' = 'light'
+): string => {
+  // Avoid divide-by-zero and show "no activity" color
+  if (maxTotalSets <= 0 || totalSets <= 0) {
+    return scheme === 'dark' ? '#111827' : '#e2e8f0';
+  }
+
+  const ratio = Math.min(totalSets / maxTotalSets, 1);
+
+  // Light palette leans on indigo; dark palette uses deeper shades for contrast
+  const palette =
+    scheme === 'dark'
+      ? ['#1f2937', '#312e81', '#4338ca', '#4f46e5', '#6366f1']
+      : ['#e2e8f0', '#c7d2fe', '#a5b4fc', '#818cf8', '#4f46e5'];
+
+  if (ratio >= 0.9) return palette[4];
+  if (ratio >= 0.7) return palette[3];
+  if (ratio >= 0.5) return palette[2];
+  if (ratio >= 0.25) return palette[1];
+  return palette[0];
 };
 
 /**

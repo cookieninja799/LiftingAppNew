@@ -284,6 +284,97 @@ export const multiWeekSessions: WorkoutSession[] = [
 ];
 
 /**
+ * Sessions for testing fractional set counting with template exercises
+ */
+export const fractionalSetsSessions: WorkoutSession[] = [
+  {
+    id: 'session-fractional-1',
+    date: '2024-12-18', // Week 51
+    exercises: [
+      {
+        id: 'ex-bench-1',
+        exercise: 'Bench Press',
+        sets: 3,
+        reps: [10, 8, 6],
+        weights: ['135', '155', '175'],
+        primaryMuscleGroup: 'Chest',
+        // Template: Chest 1.0 direct, Arms 0.5, Shoulders 0.5
+      },
+      {
+        id: 'ex-row-1',
+        exercise: 'Barbell Row',
+        sets: 4,
+        reps: [12, 10, 8, 8],
+        weights: ['135', '145', '155', '155'],
+        primaryMuscleGroup: 'Back',
+        // Template: Back 1.0 direct, Arms 0.5, Shoulders 0.5
+      },
+      {
+        id: 'ex-squat-1',
+        exercise: 'Squats',
+        sets: 4,
+        reps: [10, 8, 6, 6],
+        weights: ['185', '205', '225', '245'],
+        primaryMuscleGroup: 'Quads',
+        // Template: Quads 1.0 direct, Hamstrings 0.25
+      },
+    ],
+  },
+];
+
+/**
+ * Sessions with exercises that have no muscle group data at all (uncategorized)
+ */
+export const uncategorizedExercisesSessions: WorkoutSession[] = [
+  {
+    id: 'session-uncategorized-1',
+    date: '2024-12-18', // Week 51
+    exercises: [
+      {
+        id: 'ex-mystery-1',
+        exercise: 'Mystery Machine', // No template match
+        sets: 3,
+        reps: [10, 10, 10],
+        weights: ['100', '100', '100'],
+        // No primaryMuscleGroup - should be uncategorized
+      },
+      {
+        id: 'ex-bench-2',
+        exercise: 'Bench Press',
+        sets: 3,
+        reps: [10, 8, 6],
+        weights: ['135', '155', '175'],
+        primaryMuscleGroup: 'Chest',
+      },
+    ],
+  },
+];
+
+/**
+ * Sessions with explicit muscleContributions (server-provided)
+ */
+export const sessionsWithMuscleContributions: WorkoutSession[] = [
+  {
+    id: 'session-contrib-1',
+    date: '2024-12-18',
+    exercises: [
+      {
+        id: 'ex-custom-1',
+        exercise: 'Custom Exercise',
+        sets: 3,
+        reps: [10, 10, 10],
+        weights: ['100', '100', '100'],
+        primaryMuscleGroup: 'Chest',
+        muscleContributions: [
+          { muscleGroup: 'Chest', fraction: 1, isDirect: true },
+          { muscleGroup: 'Arms', fraction: 0.3 },
+        ],
+      },
+    ],
+  },
+];
+
+/**
  * Get current week identifier for testing
  * Uses same logic as helpers.ts
  */

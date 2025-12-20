@@ -3,11 +3,23 @@
 
 import { computeVolumeForExercise, getWeekFromDate } from '../helpers';
 import { WorkoutSession } from '../workoutSessions';
+import { ensureMuscleContributions } from './muscleContributions';
+
+export interface WeeklySetsBreakdown {
+  direct: Record<string, number>;
+  fractional: Record<string, number>;
+  total: Record<string, number>;
+}
 
 export interface MuscleGroupStat {
   totalVolume: number;
   averageVolume: number;
+  weeklySets: WeeklySetsBreakdown;
+}
+
+export interface UncategorizedStats {
   weeklySets: Record<string, number>;
+  weeklyExerciseCount: Record<string, number>;
 }
 
 export interface WorkoutStats {
@@ -16,6 +28,7 @@ export interface WorkoutStats {
   averageExercisesPerDay: number;
   averageSetsPerDay: number;
   muscleGroupStats: Record<string, MuscleGroupStat>;
+  uncategorized: UncategorizedStats;
 }
 
 export interface CalculateStatsResult {
@@ -25,6 +38,11 @@ export interface CalculateStatsResult {
 
 /**
  * Calculates workout statistics from session data.
+ * 
+ * Supports fractional set counting:
+ * - direct: Sets where fraction === 1 or isDirect === true
+ * - fractional: Sets weighted by contribution fraction
+ * - total: All sets regardless of fraction
  * 
  * @param sessions - Array of workout sessions to analyze
  * @param options - Configuration options
@@ -45,18 +63,26 @@ export function calculateStatsFromSessions(
   
   let totalExercises = 0;
   let totalSets = 0;
-  let totalWeeklySets = 0;
 
-  // Track weekly muscle group data
+  // Track weekly muscle group data with direct/fractional/total breakdown
   const weeklyMuscleGroupStats: Record<
     string,
     Record<string, {
-      totalSets: number;
       totalVolume: number;
       sessionCount: number;
-      weeklySets: Record<string, number>;
+      weeklySets: {
+        direct: number;
+        fractional: number;
+        total: number;
+      };
     }>
   > = {};
+
+  // Track uncategorized sets (exercises with no muscle contributions)
+  const uncategorized: UncategorizedStats = {
+    weeklySets: {},
+    weeklyExerciseCount: {},
+  };
 
   // Process each session
   sessions.forEach(session => {
@@ -75,6 +101,9 @@ export function calculateStatsFromSessions(
       weeklyMuscleGroupStats[week] = {};
     }
 
+    // Track which muscle groups we've seen in this session to count sessions per group correctly
+    const seenGroupsInSession = new Set<string>();
+
     session.exercises.forEach(ex => {
       totalSets += ex.sets;
       totalExercises++;
@@ -82,71 +111,95 @@ export function calculateStatsFromSessions(
       const key = ex.exercise.toLowerCase();
       exerciseFrequency[key] = (exerciseFrequency[key] || 0) + 1;
 
-      const muscleGroup = ex.primaryMuscleGroup || 'Unknown';
+      // Get muscle contributions (from exercise data, templates, or primary muscle group)
+      const contribs = ensureMuscleContributions(ex);
       
-      if (!weeklyMuscleGroupStats[week][muscleGroup]) {
-        weeklyMuscleGroupStats[week][muscleGroup] = {
-          totalSets: 0,
-          totalVolume: 0,
-          sessionCount: 0,
-          weeklySets: {},
-        };
-      }
+      if (!contribs || contribs.length === 0) {
+        // No muscle contributions - track as uncategorized
+        uncategorized.weeklySets[week] = (uncategorized.weeklySets[week] || 0) + ex.sets;
+        uncategorized.weeklyExerciseCount[week] = (uncategorized.weeklyExerciseCount[week] || 0) + 1;
+      } else {
+        const exerciseVolume = computeVolumeForExercise(ex);
+        
+        // Process each muscle contribution
+        contribs.forEach(contrib => {
+          const muscleGroup = contrib.muscleGroup;
+          
+          if (!weeklyMuscleGroupStats[week][muscleGroup]) {
+            weeklyMuscleGroupStats[week][muscleGroup] = {
+              totalVolume: 0,
+              sessionCount: 0,
+              weeklySets: {
+                direct: 0,
+                fractional: 0,
+                total: 0,
+              },
+            };
+          }
 
-      const exerciseVolume = computeVolumeForExercise(ex);
-
-      weeklyMuscleGroupStats[week][muscleGroup].totalSets += ex.sets;
-      weeklyMuscleGroupStats[week][muscleGroup].totalVolume += exerciseVolume;
-      weeklyMuscleGroupStats[week][muscleGroup].sessionCount += 1;
-      weeklyMuscleGroupStats[week][muscleGroup].weeklySets[week] =
-        (weeklyMuscleGroupStats[week][muscleGroup].weeklySets[week] || 0) + ex.sets;
-
-      // Track current week's total sets
-      if (week === currentWeek) {
-        totalWeeklySets += ex.sets;
+          const stats = weeklyMuscleGroupStats[week][muscleGroup];
+          
+          // Calculate set contributions
+          const fractionalSets = ex.sets * contrib.fraction;
+          const isDirect = contrib.fraction === 1 || contrib.isDirect === true;
+          const directSets = isDirect ? ex.sets : 0;
+          
+          stats.weeklySets.fractional += fractionalSets;
+          stats.weeklySets.direct += directSets;
+          stats.weeklySets.total += ex.sets;
+          
+          // Track volume (weighted by fraction for accurate volume tracking)
+          stats.totalVolume += exerciseVolume * contrib.fraction;
+          
+          // Increment session count only once per session per muscle group
+          if (!seenGroupsInSession.has(muscleGroup)) {
+            stats.sessionCount += 1;
+            seenGroupsInSession.add(muscleGroup);
+          }
+        });
       }
     });
   });
 
-  // Aggregate muscle group stats
+  // Aggregate muscle group stats across weeks
   const muscleGroupStats: Record<string, MuscleGroupStat> = {};
-  const weeklySessionCounts: Record<string, Record<string, number>> = {};
+  const totalSessionCounts: Record<string, number> = {};
 
   Object.keys(weeklyMuscleGroupStats).forEach(week => {
     Object.keys(weeklyMuscleGroupStats[week]).forEach(group => {
       if (!muscleGroupStats[group]) {
-        muscleGroupStats[group] = { totalVolume: 0, averageVolume: 0, weeklySets: {} };
+        muscleGroupStats[group] = { 
+          totalVolume: 0, 
+          averageVolume: 0, 
+          weeklySets: {
+            direct: {},
+            fractional: {},
+            total: {},
+          },
+        };
       }
-      if (!weeklySessionCounts[week]) {
-        weeklySessionCounts[week] = {};
-      }
-      if (!weeklySessionCounts[week][group]) {
-        weeklySessionCounts[week][group] = 0;
+      if (!totalSessionCounts[group]) {
+        totalSessionCounts[group] = 0;
       }
 
-      const totalVolume = weeklyMuscleGroupStats[week][group].totalVolume;
-      const sessionCount = weeklyMuscleGroupStats[week][group].sessionCount;
+      const weekStats = weeklyMuscleGroupStats[week][group];
 
-      muscleGroupStats[group].totalVolume += totalVolume;
-      muscleGroupStats[group].weeklySets[week] = weeklyMuscleGroupStats[week][group].weeklySets[week];
-      weeklySessionCounts[week][group] += sessionCount;
+      muscleGroupStats[group].totalVolume += weekStats.totalVolume;
+      muscleGroupStats[group].weeklySets.direct[week] = weekStats.weeklySets.direct;
+      muscleGroupStats[group].weeklySets.fractional[week] = weekStats.weeklySets.fractional;
+      muscleGroupStats[group].weeklySets.total[week] = weekStats.weeklySets.total;
+      totalSessionCounts[group] += weekStats.sessionCount;
     });
   });
 
-  // Compute average volume per session for the current week only
-  Object.keys(weeklySessionCounts).forEach(week => {
-    if (week === currentWeek) {
-      Object.keys(weeklySessionCounts[week]).forEach(group => {
-        if (muscleGroupStats[group]?.weeklySets[week]) {
-          const totalVolume = weeklyMuscleGroupStats[week][group].totalVolume;
-          const numSessions = weeklySessionCounts[week][group];
+  // Compute average volume per session (overall average)
+  Object.keys(muscleGroupStats).forEach(group => {
+    const totalVolume = muscleGroupStats[group].totalVolume;
+    const numSessions = totalSessionCounts[group];
 
-          muscleGroupStats[group].averageVolume = numSessions > 0
-            ? totalVolume / numSessions
-            : 0;
-        }
-      });
-    }
+    muscleGroupStats[group].averageVolume = numSessions > 0
+      ? totalVolume / numSessions
+      : 0;
   });
 
   // Find most common exercise
@@ -163,6 +216,7 @@ export function calculateStatsFromSessions(
     averageExercisesPerDay: totalWorkoutDays ? totalExercises / totalWorkoutDays : 0,
     averageSetsPerDay: totalWorkoutDays ? totalSets / totalWorkoutDays : 0,
     muscleGroupStats,
+    uncategorized,
   };
 
   return {
@@ -181,5 +235,9 @@ export function getEmptyStats(): WorkoutStats {
     averageExercisesPerDay: 0,
     averageSetsPerDay: 0,
     muscleGroupStats: {},
+    uncategorized: {
+      weeklySets: {},
+      weeklyExerciseCount: {},
+    },
   };
 }

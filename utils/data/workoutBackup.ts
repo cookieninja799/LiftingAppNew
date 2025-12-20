@@ -143,6 +143,9 @@ function validateAndNormalizeBackup(data: any): WorkoutBackupV1 {
             reps: exercise.reps,
             weights: exercise.weights,
             primaryMuscleGroup: exercise.primaryMuscleGroup || undefined,
+            muscleContributions: Array.isArray(exercise.muscleContributions) 
+              ? exercise.muscleContributions 
+              : undefined,
           };
         }
       );
