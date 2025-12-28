@@ -7,6 +7,8 @@ import 'react-native-reanimated';
 import '../global.css';
 
 import { ThemeProvider } from '@/components/theme';
+import { AuthProvider, useAuth } from '../providers/AuthProvider';
+import { AuthScreen } from '../screens/AuthScreen';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -43,13 +45,25 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider>
-      <RootLayoutNav />
-    </ThemeProvider>
+    <AuthProvider>
+      <ThemeProvider>
+        <RootLayoutNav />
+      </ThemeProvider>
+    </AuthProvider>
   );
 }
 
 function RootLayoutNav() {
+  const { session, loading } = useAuth();
+
+  if (loading) {
+    return null;
+  }
+
+  if (!session) {
+    return <AuthScreen />;
+  }
+
   return (
     <Stack>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

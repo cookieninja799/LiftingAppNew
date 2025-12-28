@@ -8,10 +8,16 @@ import {
 
 // Deterministic ID factory for testing
 let sessionIdCounter = 0;
+let exerciseIdCounter = 0;
+let setIdCounter = 0;
 const testSessionIdFactory = () => `session-${++sessionIdCounter}`;
+const testExerciseIdFactory = () => `ex-${++exerciseIdCounter}`;
+const testSetIdFactory = () => `set-${++setIdCounter}`;
 
 beforeEach(() => {
   sessionIdCounter = 0;
+  exerciseIdCounter = 0;
+  setIdCounter = 0;
 });
 
 describe('mergeExercisesIntoSessions', () => {
@@ -30,40 +36,59 @@ describe('mergeExercisesIntoSessions', () => {
 
     const result = mergeExercisesIntoSessions([], parsedExercises, {
       sessionIdFactory: testSessionIdFactory,
+      exerciseIdFactory: testExerciseIdFactory,
+      setIdFactory: testSetIdFactory,
     });
 
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
       id: 'session-1',
-      date: '2024-12-19',
-      exercises: [
-        {
+      performedOn: '2024-12-19',
+      exercises: expect.arrayContaining([
+        expect.objectContaining({
           id: 'ex-1',
-          exercise: 'Bench Press',
-          sets: 3,
-          reps: [10, 10, 10],
-          weights: ['135', '135', '135'],
+          nameRaw: 'Bench Press',
           primaryMuscleGroup: 'Chest',
-        },
-      ],
+        }),
+      ]),
+    });
+    expect(result[0].exercises[0].sets).toHaveLength(3);
+    expect(result[0].exercises[0].sets[0]).toMatchObject({
+      reps: 10,
+      weightText: '135',
     });
   });
 
   it('should append exercises to existing session with same date', () => {
+    const now = new Date().toISOString();
     const existingSessions: WorkoutSession[] = [
       {
         id: 'existing-session',
-        date: '2024-12-18',
+        performedOn: '2024-12-18',
         exercises: [
           {
             id: 'existing-ex',
-            exercise: 'Squats',
-            sets: 4,
-            reps: [10, 10, 8, 8],
-            weights: ['185', '205', '225', '225'],
-            primaryMuscleGroup: 'Quads',
+            sessionId: 'existing-session',
+            nameRaw: 'Squats',
+            sets: [
+              {
+                id: 'set-1',
+                exerciseId: 'existing-ex',
+                setIndex: 0,
+                reps: 10,
+                weightText: '185',
+                isBodyweight: false,
+                updatedAt: now,
+                createdAt: now,
+              },
+            ],
+            updatedAt: now,
+            createdAt: now,
           },
         ],
+        updatedAt: now,
+        createdAt: now,
+        deletedAt: null,
       },
     ];
 
@@ -81,29 +106,47 @@ describe('mergeExercisesIntoSessions', () => {
 
     const result = mergeExercisesIntoSessions(existingSessions, parsedExercises, {
       sessionIdFactory: testSessionIdFactory,
+      exerciseIdFactory: testExerciseIdFactory,
+      setIdFactory: testSetIdFactory,
     });
 
     expect(result).toHaveLength(1);
     expect(result[0].exercises).toHaveLength(2);
-    expect(result[0].exercises[0].exercise).toBe('Squats');
-    expect(result[0].exercises[1].exercise).toBe('Leg Press');
+    expect(result[0].exercises[0].nameRaw).toBe('Squats');
+    expect(result[0].exercises[1].nameRaw).toBe('Leg Press');
+    expect(result[0].exercises[1].sets).toHaveLength(3);
   });
 
   it('should create new session for different date', () => {
+    const now = new Date().toISOString();
     const existingSessions: WorkoutSession[] = [
       {
         id: 'existing-session',
-        date: '2024-12-17',
+        performedOn: '2024-12-17',
         exercises: [
           {
             id: 'existing-ex',
-            exercise: 'Deadlift',
-            sets: 5,
-            reps: [5, 5, 5, 5, 5],
-            weights: ['315', '315', '315', '315', '315'],
-            primaryMuscleGroup: 'Back',
+            sessionId: 'existing-session',
+            nameRaw: 'Deadlift',
+            sets: [
+              {
+                id: 'set-1',
+                exerciseId: 'existing-ex',
+                setIndex: 0,
+                reps: 5,
+                weightText: '315',
+                isBodyweight: false,
+                updatedAt: now,
+                createdAt: now,
+              },
+            ],
+            updatedAt: now,
+            createdAt: now,
           },
         ],
+        updatedAt: now,
+        createdAt: now,
+        deletedAt: null,
       },
     ];
 
@@ -121,28 +164,45 @@ describe('mergeExercisesIntoSessions', () => {
 
     const result = mergeExercisesIntoSessions(existingSessions, parsedExercises, {
       sessionIdFactory: testSessionIdFactory,
+      exerciseIdFactory: testExerciseIdFactory,
+      setIdFactory: testSetIdFactory,
     });
 
     expect(result).toHaveLength(2);
-    expect(result[0].date).toBe('2024-12-17');
-    expect(result[1].date).toBe('2024-12-18');
+    expect(result[0].performedOn).toBe('2024-12-17');
+    expect(result[1].performedOn).toBe('2024-12-18');
   });
 
   it('should not mutate original sessions array', () => {
+    const now = new Date().toISOString();
     const originalSessions: WorkoutSession[] = [
       {
         id: 'session-1',
-        date: '2024-12-18',
+        performedOn: '2024-12-18',
         exercises: [
           {
             id: 'ex-1',
-            exercise: 'Bench Press',
-            sets: 3,
-            reps: [10, 10, 10],
-            weights: ['135', '135', '135'],
-            primaryMuscleGroup: 'Chest',
+            sessionId: 'session-1',
+            nameRaw: 'Bench Press',
+            sets: [
+              {
+                id: 'set-1',
+                exerciseId: 'ex-1',
+                setIndex: 0,
+                reps: 10,
+                weightText: '135',
+                isBodyweight: false,
+                updatedAt: now,
+                createdAt: now,
+              },
+            ],
+            updatedAt: now,
+            createdAt: now,
           },
         ],
+        updatedAt: now,
+        createdAt: now,
+        deletedAt: null,
       },
     ];
 
@@ -162,6 +222,8 @@ describe('mergeExercisesIntoSessions', () => {
 
     mergeExercisesIntoSessions(originalSessions, parsedExercises, {
       sessionIdFactory: testSessionIdFactory,
+      exerciseIdFactory: testExerciseIdFactory,
+      setIdFactory: testSetIdFactory,
     });
 
     // Original should not be modified
@@ -201,19 +263,21 @@ describe('mergeExercisesIntoSessions', () => {
 
     const result = mergeExercisesIntoSessions([], parsedExercises, {
       sessionIdFactory: testSessionIdFactory,
+      exerciseIdFactory: testExerciseIdFactory,
+      setIdFactory: testSetIdFactory,
     });
 
     expect(result).toHaveLength(2);
     
     // Find sessions by date
-    const dec18Session = result.find(s => s.date === '2024-12-18');
-    const dec17Session = result.find(s => s.date === '2024-12-17');
+    const dec18Session = result.find(s => s.performedOn === '2024-12-18');
+    const dec17Session = result.find(s => s.performedOn === '2024-12-17');
 
     expect(dec18Session?.exercises).toHaveLength(2);
-    expect(dec18Session?.exercises[0].exercise).toBe('Bench Press');
-    expect(dec18Session?.exercises[1].exercise).toBe('Incline Press');
+    expect(dec18Session?.exercises[0].nameRaw).toBe('Bench Press');
+    expect(dec18Session?.exercises[1].nameRaw).toBe('Incline Press');
     expect(dec17Session?.exercises).toHaveLength(1);
-    expect(dec17Session?.exercises[0].exercise).toBe('Squats');
+    expect(dec17Session?.exercises[0].nameRaw).toBe('Squats');
   });
 
   it('should preserve session structure expected by Logs/Analytics/PRTab', () => {
@@ -231,24 +295,27 @@ describe('mergeExercisesIntoSessions', () => {
 
     const result = mergeExercisesIntoSessions([], parsedExercises, {
       sessionIdFactory: testSessionIdFactory,
+      exerciseIdFactory: testExerciseIdFactory,
+      setIdFactory: testSetIdFactory,
     });
 
     // Verify structure matches what other components expect
     const session = result[0];
     expect(session).toHaveProperty('id');
-    expect(session).toHaveProperty('date');
+    expect(session).toHaveProperty('performedOn');
     expect(session).toHaveProperty('exercises');
     expect(Array.isArray(session.exercises)).toBe(true);
     
     const exercise = session.exercises[0];
     expect(exercise).toHaveProperty('id');
-    expect(exercise).toHaveProperty('exercise');
+    expect(exercise).toHaveProperty('nameRaw');
     expect(exercise).toHaveProperty('sets');
-    expect(exercise).toHaveProperty('reps');
-    expect(exercise).toHaveProperty('weights');
     expect(exercise).toHaveProperty('primaryMuscleGroup');
-    expect(Array.isArray(exercise.reps)).toBe(true);
-    expect(Array.isArray(exercise.weights)).toBe(true);
+    expect(Array.isArray(exercise.sets)).toBe(true);
+    
+    const set = exercise.sets[0];
+    expect(set).toHaveProperty('reps');
+    expect(set).toHaveProperty('weightText');
   });
 
   it('should preserve muscleContributions when present', () => {
@@ -271,6 +338,8 @@ describe('mergeExercisesIntoSessions', () => {
 
     const result = mergeExercisesIntoSessions([], parsedExercises, {
       sessionIdFactory: testSessionIdFactory,
+      exerciseIdFactory: testExerciseIdFactory,
+      setIdFactory: testSetIdFactory,
     });
 
     const exercise = result[0].exercises[0];
@@ -307,6 +376,8 @@ describe('mergeExercisesIntoSessions', () => {
 
     const result = mergeExercisesIntoSessions([], parsedExercises, {
       sessionIdFactory: testSessionIdFactory,
+      exerciseIdFactory: testExerciseIdFactory,
+      setIdFactory: testSetIdFactory,
     });
 
     const exercise = result[0].exercises[0];
@@ -316,31 +387,33 @@ describe('mergeExercisesIntoSessions', () => {
 
 describe('sortSessionsByDateDesc', () => {
   it('should sort sessions by date in descending order', () => {
+    const now = new Date().toISOString();
     const sessions: WorkoutSession[] = [
-      { id: '1', date: '2024-12-15', exercises: [] },
-      { id: '2', date: '2024-12-18', exercises: [] },
-      { id: '3', date: '2024-12-10', exercises: [] },
-      { id: '4', date: '2024-12-17', exercises: [] },
+      { id: '1', performedOn: '2024-12-15', exercises: [], updatedAt: now, createdAt: now, deletedAt: null },
+      { id: '2', performedOn: '2024-12-18', exercises: [], updatedAt: now, createdAt: now, deletedAt: null },
+      { id: '3', performedOn: '2024-12-10', exercises: [], updatedAt: now, createdAt: now, deletedAt: null },
+      { id: '4', performedOn: '2024-12-17', exercises: [], updatedAt: now, createdAt: now, deletedAt: null },
     ];
 
     const sorted = sortSessionsByDateDesc(sessions);
 
-    expect(sorted[0].date).toBe('2024-12-18');
-    expect(sorted[1].date).toBe('2024-12-17');
-    expect(sorted[2].date).toBe('2024-12-15');
-    expect(sorted[3].date).toBe('2024-12-10');
+    expect(sorted[0].performedOn).toBe('2024-12-18');
+    expect(sorted[1].performedOn).toBe('2024-12-17');
+    expect(sorted[2].performedOn).toBe('2024-12-15');
+    expect(sorted[3].performedOn).toBe('2024-12-10');
   });
 
   it('should not mutate original array', () => {
+    const now = new Date().toISOString();
     const sessions: WorkoutSession[] = [
-      { id: '1', date: '2024-12-15', exercises: [] },
-      { id: '2', date: '2024-12-18', exercises: [] },
+      { id: '1', performedOn: '2024-12-15', exercises: [], updatedAt: now, createdAt: now, deletedAt: null },
+      { id: '2', performedOn: '2024-12-18', exercises: [], updatedAt: now, createdAt: now, deletedAt: null },
     ];
 
     const sorted = sortSessionsByDateDesc(sessions);
 
-    expect(sessions[0].date).toBe('2024-12-15'); // Original unchanged
-    expect(sorted[0].date).toBe('2024-12-18'); // Sorted result
+    expect(sessions[0].performedOn).toBe('2024-12-15'); // Original unchanged
+    expect(sorted[0].performedOn).toBe('2024-12-18'); // Sorted result
   });
 
   it('should handle empty array', () => {

@@ -1,7 +1,7 @@
 // utils/analytics/muscleContributions.ts
 // Deterministic muscle contribution templates for fractional set counting
 
-import { Exercise, MuscleContribution } from '../workoutSessions';
+import { WorkoutExercise, MuscleContribution } from '../workoutSessions';
 
 /**
  * Template dictionary for common exercises.
@@ -268,7 +268,7 @@ export function getDefaultMuscleContributions(
  * @returns Array of muscle contributions or undefined
  */
 export function ensureMuscleContributions(
-  ex: Exercise
+  ex: WorkoutExercise
 ): MuscleContribution[] | undefined {
   // If exercise already has valid muscleContributions, use them
   if (ex.muscleContributions && ex.muscleContributions.length > 0) {
@@ -276,5 +276,5 @@ export function ensureMuscleContributions(
   }
   
   // Otherwise, derive from templates or primary muscle group
-  return getDefaultMuscleContributions(ex.exercise, ex.primaryMuscleGroup);
+  return getDefaultMuscleContributions(ex.nameRaw, ex.primaryMuscleGroup);
 }

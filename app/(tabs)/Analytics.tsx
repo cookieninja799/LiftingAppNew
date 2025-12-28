@@ -12,8 +12,8 @@ import MuscleGroupStats from '../../components/analytics/MuscleGroupStats';
 import StatsOverview from '../../components/analytics/StatsOverview';
 import WorkoutLegend from '../../components/analytics/WorkoutLegend';
 import { calculateStatsFromSessions, getEmptyStats, WorkoutStats } from '../../utils/analytics/calculateStats';
-import { getCurrentWeek, loadUserProfile } from '../../utils/helpers';
-import { WorkoutSession } from '../../utils/workoutSessions';
+import { workoutRepository } from '../../data/WorkoutRepositoryManager';
+import { loadUserProfile, getCurrentWeek } from '../../utils/helpers';
 
 const Analytics: React.FC = () => {
   const [workoutStats, setWorkoutStats] = useState<WorkoutStats>(getEmptyStats());
@@ -22,14 +22,13 @@ const Analytics: React.FC = () => {
   const calculateStats = async () => {
     await loadUserProfile();
     try {
-      const storedSessions = await AsyncStorage.getItem('workoutSessions');
-      if (!storedSessions) {
+      const sessions = await workoutRepository.listSessions();
+      if (!sessions || sessions.length === 0) {
         setWorkoutStats(getEmptyStats());
         setMarkedDates({});
         return;
       }
   
-      const sessions: WorkoutSession[] = JSON.parse(storedSessions);
       const currentWeek = getCurrentWeek();
       
       const { workoutStats: stats, markedDates: dates } = calculateStatsFromSessions(

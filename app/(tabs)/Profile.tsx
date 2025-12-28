@@ -21,17 +21,15 @@ import { Separator } from '@/components/ui/separator';
 import { Text } from '@/components/ui/text';
 import { debugLog } from '@/lib/debugLogger';
 import {
-    BackupValidationError,
     createWorkoutBackup,
     parseWorkoutBackup,
     stringifyWorkoutBackup,
+    BackupValidationError,
 } from '../../utils/data/workoutBackup';
 import { exportWorkoutBackup, importWorkoutBackup } from '../../utils/data/workoutFileIO';
-import {
-    clearWorkoutSessions,
-    loadWorkoutSessions,
-    saveWorkoutSessions,
-} from '../../utils/data/workoutStorage';
+import { workoutRepository } from '@/data/WorkoutRepositoryManager';
+import { useAuth } from '@/providers/AuthProvider';
+import { syncEngine } from '@/data/SyncEngine';
 import { loadUserProfile } from '../../utils/helpers';
 
 const themeOptions = [
@@ -43,12 +41,15 @@ const themeOptions = [
 const Profile: React.FC = () => {
   const colorScheme = useEffectiveColorScheme();
   const { preference, setPreference } = useThemeContext();
+  const { user, signOut } = useAuth();
   // Defer the preference value to prevent rendering during theme transitions
   const deferredPreference = useDeferredValue(preference);
   const [age, setAge] = useState('');
   const [gender, setGender] = useState('');
   const [weight, setWeight] = useState('');
   const [height, setHeight] = useState('');
+  const [lastSync, setLastSync] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -60,9 +61,26 @@ const Profile: React.FC = () => {
         setWeight(parsed.weight || '');
         setHeight(parsed.height || '');
       }
+      const syncTime = await syncEngine.getLastSyncTime();
+      setLastSync(syncTime);
     };
     fetchProfile();
   }, []);
+
+  const handleSync = async () => {
+    setIsSyncing(true);
+    try {
+      const result = await syncEngine.syncNow();
+      const syncTime = await syncEngine.getLastSyncTime();
+      setLastSync(syncTime);
+      Alert.alert('Sync Complete', `Pushed ${result.pushed} and pulled ${result.pulled} changes.`);
+    } catch (error) {
+      console.error('Sync failed:', error);
+      Alert.alert('Sync Failed', 'Could not sync with cloud. Check your connection.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const handleSave = async () => {
     const profile = { age, gender, weight, height };
@@ -79,7 +97,7 @@ const Profile: React.FC = () => {
 
   const handleExportWorkoutData = async () => {
     try {
-      const sessions = await loadWorkoutSessions();
+      const sessions = await workoutRepository.listSessions();
       
       if (sessions.length === 0) {
         Alert.alert('No Data', 'You have no workout data to export.');
@@ -98,37 +116,21 @@ const Profile: React.FC = () => {
   };
 
   const handleImportWorkoutData = async () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/273bebc2-49d2-4e67-aa1c-1b6f54b489ea',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Profile.tsx:97',message:'handleImportWorkoutData entry',data:{platform:Platform.OS},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'E'})}).catch(()=>{});
-    // #endregion
-    
     const performImport = async () => {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/273bebc2-49d2-4e67-aa1c-1b6f54b489ea',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Profile.tsx:100',message:'performImport called',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       try {
         const jsonContent = await importWorkoutBackup();
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/273bebc2-49d2-4e67-aa1c-1b6f54b489ea',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Profile.tsx:102',message:'importWorkoutBackup completed',data:{contentLength:jsonContent?.length,contentPreview:jsonContent?.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
-        // #endregion
         const backup = parseWorkoutBackup(jsonContent);
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/273bebc2-49d2-4e67-aa1c-1b6f54b489ea',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Profile.tsx:103',message:'parseWorkoutBackup completed',data:{sessionCount:backup.workoutSessions.length,schemaVersion:backup.schemaVersion},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
         
-        await saveWorkoutSessions(backup.workoutSessions);
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/273bebc2-49d2-4e67-aa1c-1b6f54b489ea',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Profile.tsx:105',message:'saveWorkoutSessions completed',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
+        // Import all sessions from backup
+        for (const session of backup.workoutSessions) {
+          await workoutRepository.upsertSession(session);
+        }
         
         Alert.alert(
           'Success',
           `Imported ${backup.workoutSessions.length} workout session${backup.workoutSessions.length === 1 ? '' : 's'}.`
         );
       } catch (error) {
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/273bebc2-49d2-4e67-aa1c-1b6f54b489ea',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Profile.tsx:110',message:'Import error caught',data:{errorType:error?.constructor?.name,errorMessage:error instanceof Error ? error.message : String(error),isBackupValidationError:error instanceof BackupValidationError},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
         console.error('Import error:', error);
         if (error instanceof BackupValidationError) {
           Alert.alert('Import Failed', `Invalid backup file: ${error.message}`);
@@ -178,7 +180,10 @@ const Profile: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await clearWorkoutSessions();
+              const sessions = await workoutRepository.listSessions();
+              for (const session of sessions) {
+                await workoutRepository.softDeleteSession(session.id);
+              }
               Alert.alert('Success', 'All workout records have been cleared.');
             } catch (error) {
               console.error('Clear error:', error);
@@ -202,10 +207,54 @@ const Profile: React.FC = () => {
           contentContainerStyle={{ padding: 20 }} 
           keyboardShouldPersistTaps="handled"
         >
-          <View className="mb-6">
-            <Text variant="h1">Profile</Text>
-            <Text variant="muted">Personalize your training experience</Text>
+          <View className="mb-6 flex-row items-center justify-between">
+            <View>
+              <Text variant="h1">Profile</Text>
+              <Text variant="muted">Personalize your training experience</Text>
+            </View>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onPress={signOut}
+              className="border-destructive"
+            >
+              <Ionicons name="log-out-outline" size={18} color={destructiveColor} />
+              <Text className="text-destructive ml-1">Sign Out</Text>
+            </Button>
           </View>
+
+          <Card className="mb-6 bg-primary/5 border-primary/20">
+            <CardHeader className="flex-row items-center gap-3 py-3">
+              <View className="bg-primary/20 p-2 rounded-full">
+                <Ionicons name="person" size={20} color={primaryColor} />
+              </View>
+              <View className="flex-1">
+                <Text className="font-bold">{user?.email}</Text>
+                <Text variant="small" className="text-primary/70">Authenticated with Supabase</Text>
+              </View>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onPress={handleSync}
+                disabled={isSyncing}
+                className="flex-row items-center gap-2"
+              >
+                <Ionicons 
+                  name="sync" 
+                  size={18} 
+                  color={primaryColor} 
+                  className={isSyncing ? 'animate-spin' : ''} 
+                />
+                <Text variant="small" className="text-primary font-bold">Sync</Text>
+              </Button>
+            </CardHeader>
+            <Separator className="bg-primary/10" />
+            <CardContent className="py-2">
+              <Text variant="small" className="text-center text-primary/60">
+                Last synced: {lastSync ? new Date(lastSync).toLocaleString() : 'Never'}
+              </Text>
+            </CardContent>
+          </Card>
 
           {/* Theme Preference Card */}
           <Card className="mb-6">

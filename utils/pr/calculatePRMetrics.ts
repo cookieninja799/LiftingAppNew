@@ -28,10 +28,10 @@ export function calculatePRMetrics(sessions: WorkoutSession[]): PRMetric[] {
 
   sessions.forEach(session => {
     session.exercises.forEach(ex => {
-      ex.weights.forEach((weightStr, i) => {
-        const weight = parseFloat(weightStr) || 0;
-        const reps = ex.reps[i] || 0;
-        const key = ex.exercise.toLowerCase();
+      ex.sets.forEach(set => {
+        const weight = parseFloat(set.weightText.replace(/[^\d.]/g, "")) || 0;
+        const reps = set.reps || 0;
+        const key = ex.nameRaw.toLowerCase();
 
         // Update if:
         // 1. No record exists for this exercise
@@ -43,10 +43,10 @@ export function calculatePRMetrics(sessions: WorkoutSession[]): PRMetric[] {
           (weight === prMetrics[key].maxWeight && reps > prMetrics[key].reps)
         ) {
           prMetrics[key] = {
-            exercise: ex.exercise,
+            exercise: ex.nameRaw,
             maxWeight: weight,
             reps: reps,
-            date: session.date,
+            date: session.performedOn,
           };
         }
       });

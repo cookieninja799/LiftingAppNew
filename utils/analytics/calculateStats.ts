@@ -95,13 +95,13 @@ export function calculateStatsFromSessions(
     let dailyTotalSets = 0;
 
     session.exercises.forEach(ex => {
-      dailyTotalSets += ex.sets;
+      dailyTotalSets += ex.sets.length;
     });
 
     // Store total sets per day for heatmap
-    dateTotalSets[session.date] = dailyTotalSets;
+    dateTotalSets[session.performedOn] = dailyTotalSets;
     
-    const week = getWeekFromDate(session.date);
+    const week = getWeekFromDate(session.performedOn);
     
     if (!weeklyMuscleGroupStats[week]) {
       weeklyMuscleGroupStats[week] = {};
@@ -111,10 +111,11 @@ export function calculateStatsFromSessions(
     const seenGroupsInSession = new Set<string>();
 
     session.exercises.forEach(ex => {
-      totalSets += ex.sets;
+      const setCount = ex.sets.length;
+      totalSets += setCount;
       totalExercises++;
 
-      const key = ex.exercise.toLowerCase();
+      const key = ex.nameRaw.toLowerCase();
       exerciseFrequency[key] = (exerciseFrequency[key] || 0) + 1;
 
       // Get muscle contributions (from exercise data, templates, or primary muscle group)
@@ -122,7 +123,7 @@ export function calculateStatsFromSessions(
       
       if (!contribs || contribs.length === 0) {
         // No muscle contributions - track as uncategorized
-        uncategorized.weeklySets[week] = (uncategorized.weeklySets[week] || 0) + ex.sets;
+        uncategorized.weeklySets[week] = (uncategorized.weeklySets[week] || 0) + setCount;
         uncategorized.weeklyExerciseCount[week] = (uncategorized.weeklyExerciseCount[week] || 0) + 1;
       } else {
         const exerciseVolume = computeVolumeForExercise(ex);
@@ -148,13 +149,13 @@ export function calculateStatsFromSessions(
           const stats = weeklyMuscleGroupStats[week][muscleGroup];
           
           // Calculate set contributions
-          const fractionalSets = ex.sets * contrib.fraction;
+          const fractionalSets = setCount * contrib.fraction;
           const isDirect = contrib.fraction === 1 || contrib.isDirect === true;
-          const directSets = isDirect ? ex.sets : 0;
+          const directSets = isDirect ? setCount : 0;
           
           stats.weeklySets.fractional += fractionalSets;
           stats.weeklySets.direct += directSets;
-          stats.weeklySets.touched += ex.sets;
+          stats.weeklySets.touched += setCount;
           
           // Track volume
           // totalVolume: legacy field, keep as allocated for backward compatibility

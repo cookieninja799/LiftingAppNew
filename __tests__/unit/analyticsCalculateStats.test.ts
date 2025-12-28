@@ -139,21 +139,32 @@ describe('calculateStatsFromSessions', () => {
     });
 
     it('should handle single exercise', () => {
+      const now = new Date().toISOString();
       const { workoutStats } = calculateStatsFromSessions(
         [
           {
             id: 'session-1',
-            date: '2024-12-18',
+            performedOn: '2024-12-18',
             exercises: [
               {
                 id: 'ex-1',
-                exercise: 'Deadlift',
-                sets: 5,
-                reps: [5, 5, 5, 5, 5],
-                weights: ['315', '315', '315', '315', '315'],
+                sessionId: 'session-1',
+                nameRaw: 'Deadlift',
+                sets: [
+                  { id: 's1', exerciseId: 'ex-1', setIndex: 0, reps: 5, weightText: '315', updatedAt: now, createdAt: now },
+                  { id: 's2', exerciseId: 'ex-1', setIndex: 1, reps: 5, weightText: '315', updatedAt: now, createdAt: now },
+                  { id: 's3', exerciseId: 'ex-1', setIndex: 2, reps: 5, weightText: '315', updatedAt: now, createdAt: now },
+                  { id: 's4', exerciseId: 'ex-1', setIndex: 3, reps: 5, weightText: '315', updatedAt: now, createdAt: now },
+                  { id: 's5', exerciseId: 'ex-1', setIndex: 4, reps: 5, weightText: '315', updatedAt: now, createdAt: now },
+                ],
                 primaryMuscleGroup: 'Back',
+                updatedAt: now,
+                createdAt: now,
               },
             ],
+            updatedAt: now,
+            createdAt: now,
+            deletedAt: null,
           },
         ],
         { currentWeek }
@@ -336,21 +347,30 @@ describe('calculateStatsFromSessions', () => {
     });
 
     it('should not count secondary muscle volume as direct volume', () => {
+      const now = new Date().toISOString();
       // Create a session with just Bench Press to verify volume calculations
       const benchOnlySessions = [
         {
           id: 'session-1',
-          date: '2024-12-18',
+          performedOn: '2024-12-18',
           exercises: [
             {
               id: 'ex-1',
-              exercise: 'Bench Press',
-              sets: 3,
-              reps: [5, 5, 5],
-              weights: ['135', '135', '135'],
+              sessionId: 'session-1',
+              nameRaw: 'Bench Press',
+              sets: [
+                { id: 's1', exerciseId: 'ex-1', setIndex: 0, reps: 5, weightText: '135', updatedAt: now, createdAt: now },
+                { id: 's2', exerciseId: 'ex-1', setIndex: 1, reps: 5, weightText: '135', updatedAt: now, createdAt: now },
+                { id: 's3', exerciseId: 'ex-1', setIndex: 2, reps: 5, weightText: '135', updatedAt: now, createdAt: now },
+              ],
               primaryMuscleGroup: 'Chest',
+              updatedAt: now,
+              createdAt: now,
             },
           ],
+          updatedAt: now,
+          createdAt: now,
+          deletedAt: null,
         },
       ];
 

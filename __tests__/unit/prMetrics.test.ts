@@ -83,20 +83,56 @@ describe('calculatePRMetrics', () => {
     });
 
     it('should handle multiple sets with same weight - highest reps wins', () => {
-      const sessions = [
+      const now = new Date().toISOString();
+      const sessions: WorkoutSession[] = [
         {
           id: 'session-1',
-          date: '2024-12-18',
+          performedOn: '2024-12-18',
           exercises: [
             {
               id: 'ex-1',
-              exercise: 'Bench Press',
-              sets: 3,
-              reps: [8, 10, 6], // 10 reps is highest at 135 lbs
-              weights: ['135', '135', '135'],
+              sessionId: 'session-1',
+              nameRaw: 'Bench Press',
               primaryMuscleGroup: 'Chest',
+              sets: [
+                {
+                  id: 'set-1',
+                  exerciseId: 'ex-1',
+                  setIndex: 0,
+                  reps: 8,
+                  weightText: '135',
+                  isBodyweight: false,
+                  updatedAt: now,
+                  createdAt: now,
+                },
+                {
+                  id: 'set-2',
+                  exerciseId: 'ex-1',
+                  setIndex: 1,
+                  reps: 10,
+                  weightText: '135',
+                  isBodyweight: false,
+                  updatedAt: now,
+                  createdAt: now,
+                },
+                {
+                  id: 'set-3',
+                  exerciseId: 'ex-1',
+                  setIndex: 2,
+                  reps: 6,
+                  weightText: '135',
+                  isBodyweight: false,
+                  updatedAt: now,
+                  createdAt: now,
+                },
+              ],
+              updatedAt: now,
+              createdAt: now,
             },
           ],
+          updatedAt: now,
+          createdAt: now,
+          deletedAt: null,
         },
       ];
 
@@ -108,34 +144,65 @@ describe('calculatePRMetrics', () => {
     });
 
     it('should be case-insensitive for exercise names', () => {
-      const sessions = [
+      const now = new Date().toISOString();
+      const sessions: WorkoutSession[] = [
         {
           id: 'session-1',
-          date: '2024-12-17',
+          performedOn: '2024-12-17',
           exercises: [
             {
               id: 'ex-1',
-              exercise: 'BENCH PRESS',
-              sets: 1,
-              reps: [5],
-              weights: ['225'],
+              sessionId: 'session-1',
+              nameRaw: 'BENCH PRESS',
               primaryMuscleGroup: 'Chest',
+              sets: [
+                {
+                  id: 'set-1',
+                  exerciseId: 'ex-1',
+                  setIndex: 0,
+                  reps: 5,
+                  weightText: '225',
+                  isBodyweight: false,
+                  updatedAt: now,
+                  createdAt: now,
+                },
+              ],
+              updatedAt: now,
+              createdAt: now,
             },
           ],
+          updatedAt: now,
+          createdAt: now,
+          deletedAt: null,
         },
         {
           id: 'session-2',
-          date: '2024-12-18',
+          performedOn: '2024-12-18',
           exercises: [
             {
               id: 'ex-2',
-              exercise: 'bench press', // Different casing
-              sets: 1,
-              reps: [3],
-              weights: ['235'], // Higher weight
+              sessionId: 'session-2',
+              nameRaw: 'bench press', // Different casing
               primaryMuscleGroup: 'Chest',
+              sets: [
+                {
+                  id: 'set-2',
+                  exerciseId: 'ex-2',
+                  setIndex: 0,
+                  reps: 3,
+                  weightText: '235', // Higher weight
+                  isBodyweight: false,
+                  updatedAt: now,
+                  createdAt: now,
+                },
+              ],
+              updatedAt: now,
+              createdAt: now,
             },
           ],
+          updatedAt: now,
+          createdAt: now,
+          deletedAt: null,
         },
       ];
 

@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 let cachedUserProfile: { age: string; gender: string; weight: string; height: string } | null = null;
 
@@ -124,27 +125,29 @@ export const getVolumeStatus = (
 
 
 
-export const computeVolumeForExercise = (exercise: { exercise: string; sets: number; reps: number[]; weights: string[] }): number => {
+import { WorkoutExercise } from './workoutSessions';
+
+export const computeVolumeForExercise = (exercise: WorkoutExercise): number => {
   let volume = 0;
   const userBW = getUserBodyWeight();
 
-  for (let i = 0; i < exercise.sets; i++) {
-    const reps = exercise.reps[i] || 0;
-    const weightStr = exercise.weights[i] || "0";
-    let weight = parseInt(weightStr.replace(/\D/g, "")) || 0;
+  exercise.sets.forEach(set => {
+    const reps = set.reps || 0;
+    const weightStr = set.weightText || "0";
+    let weight = parseFloat(weightStr.replace(/[^\d.]/g, "")) || 0;
 
     // Handle pure bodyweight exercises
-    if (weightStr.toLowerCase() === "bodyweight") {
+    if (weightStr.toLowerCase().includes("bodyweight") || set.isBodyweight) {
       weight = userBW;
     }
 
     // Handle weighted bodyweight exercises (e.g., "Weighted Pull-ups")
-    if (exercise.exercise.toLowerCase().includes("weighted") && weight > 0) {
+    if (exercise.nameRaw.toLowerCase().includes("weighted") && weight > 0 && !set.isBodyweight) {
       weight += userBW;
     }
 
     volume += reps * weight;
-  }
+  });
 
   return volume;
 };
@@ -181,23 +184,27 @@ export const getColorForTotalSets = (
  */
 export const getApiBaseUrl = (): string => {
   // Check for environment variable first
-  if (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_API_URL) {
+  if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL;
   }
   
-  // For web platform, use localhost to avoid mixed content issues
+  // For web platform
   if (Platform.OS === 'web') {
-    // Check if we're in a secure context (HTTPS)
-    if (typeof window !== 'undefined' && window.isSecureContext) {
-      // Use localhost for same-origin requests (avoids mixed content)
-      return 'http://localhost:3000';
-    }
-    // Fallback to localhost even in non-secure context
     return 'http://localhost:3000';
   }
   
-  // For native platforms (iOS/Android), use the network IP
-  // Note: Update this IP to match your development machine's local IP address
-  // You can find it by running: hostname -I (Linux) or ipconfig getifaddr en0 (Mac)
-  return 'http://192.168.4.38:3000';
+  // For native platforms (iOS/Android)
+  // Use your confirmed Windows IP address
+  const confirmedIp = '192.168.12.223';
+  
+  const debuggerHost = Constants.expoConfig?.hostUri;
+  const detectedHost = debuggerHost ? debuggerHost.split(':')[0] : confirmedIp;
+  
+  // If we are on a tunnel (exp.direct) or a simulator, we should use the confirmed IP
+  // because the tunnel only forwards port 8081, not 3000.
+  if (detectedHost.includes('exp.direct') || detectedHost === 'localhost') {
+    return `http://${confirmedIp}:3000`;
+  }
+  
+  return `http://${detectedHost}:3000`;
 };

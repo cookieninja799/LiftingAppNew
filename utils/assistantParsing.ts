@@ -33,10 +33,27 @@ export type IdFactory = () => string;
 export type DateFactory = () => string;
 
 /**
- * Default ID factory - generates unique IDs based on timestamp + random string
+ * Generates a UUID v4 compliant string
+ * Format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
  */
-export const defaultIdFactory: IdFactory = (): string =>
-  Date.now().toString() + Math.random().toString(36).substring(2, 8);
+function generateUUID(): string {
+  // Use crypto.randomUUID() if available (React Native 0.70+, Node 15.6+)
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  
+  // Fallback: Generate UUID v4 manually
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/**
+ * Default ID factory - generates UUID v4 format for compatibility with PostgreSQL UUID columns
+ */
+export const defaultIdFactory: IdFactory = (): string => generateUUID();
 
 /**
  * Default date factory - returns today's date in YYYY-MM-DD format

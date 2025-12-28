@@ -23,7 +23,9 @@ import { SegmentedControl } from '@/components/ui/segmented-control';
 import { Separator } from '@/components/ui/separator';
 import { Text } from '@/components/ui/text';
 import { getMonthFromDate, getWeekFromDate } from '../../utils/helpers';
-import { Exercise, WorkoutSession } from '../../utils/workoutSessions';
+import { WorkoutSession, WorkoutExercise, WorkoutSet, sortSessionsByDateDesc } from '../../utils/workoutSessions';
+import { workoutRepository } from '@/data/WorkoutRepositoryManager';
+import { defaultIdFactory } from '@/utils/assistantParsing';
 
 // Group sessions using the provided helper functions.
 const groupSessions = (
@@ -33,8 +35,8 @@ const groupSessions = (
   return sessions.reduce((acc, session) => {
     const key =
       groupBy === 'week'
-        ? getWeekFromDate(session.date)
-        : getMonthFromDate(session.date);
+        ? getWeekFromDate(session.performedOn)
+        : getMonthFromDate(session.performedOn);
     if (!acc[key]) {
       acc[key] = [];
     }
@@ -45,7 +47,7 @@ const groupSessions = (
 
 type EditPayload = {
   sessionId: string;
-  exercise: Exercise;
+  exercise: WorkoutExercise;
 };
 
 export default function Logs() {
@@ -75,7 +77,7 @@ export default function Logs() {
     const exerciseSet = new Set<string>();
     sessions.forEach(session => {
       session.exercises.forEach(ex => {
-        if (ex.exercise) exerciseSet.add(ex.exercise);
+        if (ex.nameRaw) exerciseSet.add(ex.nameRaw);
       });
     });
     return Array.from(exerciseSet);
@@ -98,10 +100,8 @@ export default function Logs() {
     useCallback(() => {
       const loadSessions = async () => {
         try {
-          const storedSessions = await AsyncStorage.getItem('workoutSessions');
-          if (storedSessions) {
-            setSessions(JSON.parse(storedSessions));
-          }
+          const fetchedSessions = await workoutRepository.listSessions();
+          setSessions(fetchedSessions);
         } catch (error) {
           console.error('Failed to load sessions:', error);
         }
@@ -110,27 +110,23 @@ export default function Logs() {
     }, [])
   );
 
-  const saveSessions = async (updatedSessions: WorkoutSession[]) => {
-    try {
-      await AsyncStorage.setItem('workoutSessions', JSON.stringify(updatedSessions));
-    } catch (error) {
-      console.error('Failed to save sessions:', error);
-    }
-  };
-
   const deleteExercise = async (sessionId: string, exerciseId: string) => {
-    const updatedSessions = sessions.map(session => {
-      if (session.id === sessionId) {
-        return {
-          ...session,
-          exercises: session.exercises.filter(ex => ex.id !== exerciseId),
-        };
-      }
-      return session;
-    }).filter(s => s.exercises.length > 0);
+    const session = await workoutRepository.getWorkoutSession(sessionId);
+    if (!session) return;
+
+    const updatedExercises = session.exercises.filter(ex => ex.id !== exerciseId);
     
-    setSessions(updatedSessions);
-    saveSessions(updatedSessions);
+    if (updatedExercises.length === 0) {
+      await workoutRepository.softDeleteSession(sessionId);
+    } else {
+      await workoutRepository.upsertSession({
+        ...session,
+        exercises: updatedExercises,
+      });
+    }
+    
+    const fetchedSessions = await workoutRepository.listSessions();
+    setSessions(fetchedSessions);
   };
 
   const confirmDeleteExercise = (sessionId: string, exerciseId: string) => {
@@ -141,9 +137,9 @@ export default function Logs() {
   };
 
   const deleteSession = async (sessionId: string) => {
-    const updatedSessions = sessions.filter(session => session.id !== sessionId);
-    setSessions(updatedSessions);
-    saveSessions(updatedSessions);
+    await workoutRepository.softDeleteSession(sessionId);
+    const fetchedSessions = await workoutRepository.listSessions();
+    setSessions(fetchedSessions);
   };
 
   const confirmDeleteSession = (sessionId: string) => {
@@ -153,81 +149,124 @@ export default function Logs() {
     ]);
   };
 
-  const editExercise = (sessionId: string, exercise: Exercise) => {
+  const editExercise = (sessionId: string, exercise: WorkoutExercise) => {
     setCurrentEdit({ sessionId, exercise });
-    setEditExerciseName(exercise.exercise);
-    setEditSets(exercise.sets.toString());
-    setEditReps(exercise.reps.join(', '));
-    setEditWeights(exercise.weights.join(', '));
+    setEditExerciseName(exercise.nameRaw);
+    setEditSets(exercise.sets.length.toString());
+    setEditReps(exercise.sets.map(s => s.reps).join(', '));
+    setEditWeights(exercise.sets.map(s => s.weightText).join(', '));
     setEditMuscleGroup(exercise.primaryMuscleGroup || '');
   };
 
-  const saveEditedExercise = () => {
+  const saveEditedExercise = async () => {
     if (!currentEdit) return;
 
-    const updatedExercise: Exercise = {
-      ...currentEdit.exercise,
-      exercise: editExerciseName,
-      sets: parseInt(editSets, 10) || 1,
-      reps: editReps ? editReps.split(',').map(rep => parseInt(rep.trim(), 10)) : [],
-      weights: editWeights ? editWeights.split(',').map(w => w.trim()) : [],
-      primaryMuscleGroup: editMuscleGroup || undefined,
-    };
+    const now = new Date().toISOString();
+    const repsArr = editReps ? editReps.split(',').map(rep => parseInt(rep.trim(), 10) || 0) : [];
+    const weightsArr = editWeights ? editWeights.split(',').map(w => w.trim()) : [];
+    const setCount = parseInt(editSets, 10) || 0;
+    const finalSetCount = Math.max(repsArr.length, weightsArr.length, setCount);
 
-    const updatedSessions = sessions.map(session => {
-      if (session.id === currentEdit.sessionId) {
-        return {
-          ...session,
-          exercises: session.exercises.map(ex =>
-            ex.id === updatedExercise.id ? updatedExercise : ex
-          ),
-        };
-      }
-      return session;
-    });
-
-    setSessions(updatedSessions);
-    saveSessions(updatedSessions);
-    setCurrentEdit(null);
-  };
-
-  const saveNewExercise = () => {
-    if (!newExerciseName.trim()) return;
-    const date = newDate.trim() || new Date().toISOString().split('T')[0];
-
-    const newExercise: Exercise = {
-      id: Date.now().toString() + '-' + Math.floor(Math.random() * 1000).toString(),
-      exercise: newExerciseName,
-      sets: parseInt(newSets, 10) || 1,
-      reps: newReps ? newReps.split(',').map(rep => parseInt(rep.trim(), 10)) : [],
-      weights: newWeights ? newWeights.split(',').map(w => w.trim()) : [],
-      primaryMuscleGroup: newMuscleGroup || undefined,
-    };
-
-    let sessionExists = false;
-    let updatedSessions = sessions.map(session => {
-      if (session.date === date) {
-        sessionExists = true;
-        return { ...session, exercises: [...session.exercises, newExercise] };
-      }
-      return session;
-    });
-    if (!sessionExists) {
-      updatedSessions.push({
-        id: Date.now().toString() + '-' + Math.floor(Math.random() * 1000).toString(),
-        date,
-        exercises: [newExercise],
+    const updatedSets: WorkoutSet[] = [];
+    for (let i = 0; i < finalSetCount; i++) {
+      updatedSets.push({
+        id: currentEdit.exercise.sets[i]?.id || defaultIdFactory(),
+        exerciseId: currentEdit.exercise.id,
+        setIndex: i,
+        reps: repsArr[i] || 0,
+        weightText: weightsArr[i] || '0',
+        isBodyweight: false,
+        updatedAt: now,
+        createdAt: currentEdit.exercise.sets[i]?.createdAt || now,
       });
     }
 
-    setSessions(updatedSessions);
-    saveSessions(updatedSessions);
+    const updatedExercise: WorkoutExercise = {
+      ...currentEdit.exercise,
+      nameRaw: editExerciseName,
+      sets: updatedSets,
+      primaryMuscleGroup: editMuscleGroup || undefined,
+      updatedAt: now,
+    };
+
+    const session = await workoutRepository.getWorkoutSession(currentEdit.sessionId);
+    if (session) {
+      await workoutRepository.upsertSession({
+        ...session,
+        exercises: session.exercises.map(ex =>
+          ex.id === updatedExercise.id ? updatedExercise : ex
+        ),
+      });
+    }
+
+    const fetchedSessions = await workoutRepository.listSessions();
+    setSessions(fetchedSessions);
+    setCurrentEdit(null);
+  };
+
+  const saveNewExercise = async () => {
+    if (!newExerciseName.trim()) return;
+    const date = newDate.trim() || new Date().toISOString().split('T')[0];
+    const now = new Date().toISOString();
+
+    const repsArr = newReps ? newReps.split(',').map(rep => parseInt(rep.trim(), 10) || 0) : [];
+    const weightsArr = newWeights ? newWeights.split(',').map(w => w.trim()) : [];
+    const setCount = parseInt(newSets, 10) || 0;
+    const finalSetCount = Math.max(repsArr.length, weightsArr.length, setCount);
+
+    const exerciseId = defaultIdFactory();
+    const newSetsArr: WorkoutSet[] = [];
+    for (let i = 0; i < finalSetCount; i++) {
+      newSetsArr.push({
+        id: defaultIdFactory(),
+        exerciseId,
+        setIndex: i,
+        reps: repsArr[i] || 0,
+        weightText: weightsArr[i] || '0',
+        isBodyweight: false,
+        updatedAt: now,
+        createdAt: now,
+      });
+    }
+
+    const newExercise: WorkoutExercise = {
+      id: exerciseId,
+      sessionId: '', // Will be set below
+      nameRaw: newExerciseName,
+      sets: newSetsArr,
+      primaryMuscleGroup: newMuscleGroup || undefined,
+      updatedAt: now,
+      createdAt: now,
+    };
+
+    let session = sessions.find(s => s.performedOn === date);
+    if (session) {
+      newExercise.sessionId = session.id;
+      await workoutRepository.upsertSession({
+        ...session,
+        exercises: [...session.exercises, newExercise],
+      });
+    } else {
+      const sessionId = defaultIdFactory();
+      newExercise.sessionId = sessionId;
+      await workoutRepository.upsertSession({
+        id: sessionId,
+        performedOn: date,
+        exercises: [newExercise],
+        updatedAt: now,
+        createdAt: now,
+        deletedAt: null,
+      });
+    }
+
+    const fetchedSessions = await workoutRepository.listSessions();
+    setSessions(fetchedSessions);
     setIsAddModalVisible(false);
     setNewExerciseName('');
   };
 
   const sortedSessions = useMemo(() => {
-    return [...sessions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return sortSessionsByDateDesc(sessions);
   }, [sessions]);
 
   const groupedSessions = useMemo(() => {
@@ -274,7 +313,7 @@ export default function Logs() {
                     >
                       <View>
                         <Text className="font-bold text-lg">
-                          {new Date(session.date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                          {new Date(session.performedOn).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
                         </Text>
                         <Text variant="muted">
                           {session.exercises.length} {session.exercises.length === 1 ? 'exercise' : 'exercises'}
@@ -298,9 +337,9 @@ export default function Logs() {
                         {session.exercises.map(ex => (
                           <View key={ex.id} className="flex-row items-center justify-between">
                             <View className="flex-1">
-                              <Text className="font-medium">{ex.exercise}</Text>
+                              <Text className="font-medium">{ex.nameRaw}</Text>
                               <Text variant="muted" className="text-sm">
-                                {ex.sets} sets • {ex.reps.join(', ')} reps
+                                {ex.sets.length} sets • {ex.sets.map(s => s.reps).join(', ')} reps
                               </Text>
                             </View>
                             <View className="flex-row items-center gap-2">

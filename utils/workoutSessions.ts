@@ -1,5 +1,5 @@
 // utils/workoutSessions.ts
-// Extracted session merge logic from RecordWorkout.tsx for testability
+// Normalized session model for Phase 0-1 (Supabase + sync)
 
 import { IdFactory, ParsedExercise, defaultIdFactory } from './assistantParsing';
 
@@ -9,42 +9,66 @@ export type MuscleContribution = {
   isDirect?: boolean;
 };
 
-export type Exercise = {
+export type WorkoutSet = {
   id: string;
-  exercise: string;
-  sets: number;
-  reps: number[];
-  weights: string[];
+  exerciseId: string;
+  setIndex: number;
+  reps: number;
+  weightText: string;
+  weightKg?: number;
+  isBodyweight: boolean;
+  updatedAt: string;
+  createdAt: string;
+};
+
+export type WorkoutExercise = {
+  id: string;
+  sessionId: string;
+  nameRaw: string;
+  nameCanonical?: string;
   primaryMuscleGroup?: string;
   muscleContributions?: MuscleContribution[];
+  sets: WorkoutSet[];
+  updatedAt: string;
+  createdAt: string;
 };
+
+// Alias for backward compatibility during migration if needed
+export type Exercise = WorkoutExercise;
 
 export type WorkoutSession = {
   id: string;
-  date: string;
-  exercises: Exercise[];
+  userId?: string;
+  performedOn: string; // ISO date or YYYY-MM-DD
+  title?: string;
+  notes?: string;
+  source?: string;
+  exercises: WorkoutExercise[];
+  updatedAt: string;
+  createdAt: string;
+  deletedAt?: string | null;
 };
 
 /**
  * Merges parsed exercises into existing workout sessions.
- * 
- * - If an exercise's date matches an existing session, appends the exercise to that session
- * - If no session exists for the date, creates a new session
- * 
- * @param existingSessions - Current array of workout sessions
- * @param parsedExercises - Array of parsed exercises to merge
- * @param options - Configuration options
- * @param options.sessionIdFactory - Factory function to generate session IDs
- * @returns Updated array of workout sessions
+ * Converts flat ParsedExercise into normalized v1 structure.
  */
 export function mergeExercisesIntoSessions(
   existingSessions: WorkoutSession[],
   parsedExercises: ParsedExercise[],
   options: {
     sessionIdFactory?: IdFactory;
+    exerciseIdFactory?: IdFactory;
+    setIdFactory?: IdFactory;
   } = {}
 ): WorkoutSession[] {
-  const { sessionIdFactory = defaultIdFactory } = options;
+  const { 
+    sessionIdFactory = defaultIdFactory,
+    exerciseIdFactory = defaultIdFactory,
+    setIdFactory = defaultIdFactory
+  } = options;
+
+  const now = new Date().toISOString();
 
   // Create a copy to avoid mutating the original
   const updatedSessions = existingSessions.map(session => ({
@@ -55,31 +79,58 @@ export function mergeExercisesIntoSessions(
   parsedExercises.forEach(parsedResult => {
     const sessionDate = parsedResult.date;
     
-    const newExercise: Exercise = {
-      id: parsedResult.id,
-      exercise: parsedResult.exercise,
-      sets: parsedResult.sets,
-      reps: parsedResult.reps || [],
-      weights: parsedResult.weights || [],
-      primaryMuscleGroup: parsedResult.primaryMuscleGroup,
-      muscleContributions: parsedResult.muscleContributions,
-    };
-
     const existingSessionIndex = updatedSessions.findIndex(
-      session => session.date === sessionDate
+      session => session.performedOn === sessionDate || session.performedOn.startsWith(sessionDate)
     );
 
+    let session: WorkoutSession;
     if (existingSessionIndex !== -1) {
-      // Append to existing session
-      updatedSessions[existingSessionIndex].exercises.push(newExercise);
+      session = updatedSessions[existingSessionIndex];
     } else {
-      // Create new session
-      updatedSessions.push({
+      session = {
         id: sessionIdFactory(),
-        date: sessionDate,
-        exercises: [newExercise],
+        performedOn: sessionDate,
+        exercises: [],
+        updatedAt: now,
+        createdAt: now,
+        deletedAt: null,
+        source: 'ai_parsing'
+      };
+      updatedSessions.push(session);
+    }
+
+    const exerciseId = exerciseIdFactory();
+    const newExercise: WorkoutExercise = {
+      id: exerciseId,
+      sessionId: session.id,
+      nameRaw: parsedResult.exercise,
+      primaryMuscleGroup: parsedResult.primaryMuscleGroup,
+      muscleContributions: parsedResult.muscleContributions,
+      sets: [],
+      updatedAt: now,
+      createdAt: now,
+    };
+
+    // Normalize sets
+    const reps = parsedResult.reps || [];
+    const weights = parsedResult.weights || [];
+    const setCount = Math.max(reps.length, weights.length, parsedResult.sets || 0);
+
+    for (let i = 0; i < setCount; i++) {
+      newExercise.sets.push({
+        id: setIdFactory(),
+        exerciseId: exerciseId,
+        setIndex: i,
+        reps: reps[i] || 0,
+        weightText: weights[i] || '0',
+        isBodyweight: false, // Default
+        updatedAt: now,
+        createdAt: now,
       });
     }
+
+    session.exercises.push(newExercise);
+    session.updatedAt = now;
   });
 
   return updatedSessions;
@@ -90,6 +141,6 @@ export function mergeExercisesIntoSessions(
  */
 export function sortSessionsByDateDesc(sessions: WorkoutSession[]): WorkoutSession[] {
   return [...sessions].sort((a, b) => 
-    new Date(b.date).getTime() - new Date(a.date).getTime()
+    new Date(b.performedOn).getTime() - new Date(a.performedOn).getTime()
   );
 }

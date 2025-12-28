@@ -22,3 +22,6 @@ export async function setThemePreference(preference: ThemePreference): Promise<v
     console.error('Failed to save theme preference:', error);
   }
 }
+
+
+

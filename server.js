@@ -13,6 +13,33 @@ const openai = new OpenAI({
 // Create an Express app
 const app = express();
 
+/**
+ * DEV-ONLY RELAY GUARDRAILS
+ * In production, these calls should go through a secure backend with 
+ * proper Supabase JWT validation.
+ */
+console.warn("WARNING: Running in DEV-ONLY relay mode. This is not secure for production.");
+
+// Rate limiting stub
+const requestCounts = new Map();
+const RATE_LIMIT = 50; // Max requests per window
+
+app.use((req, res, next) => {
+    const clientIp = req.ip;
+    const currentCount = (requestCounts.get(clientIp) || 0) + 1;
+    requestCounts.set(clientIp, currentCount);
+
+    if (currentCount > RATE_LIMIT) {
+        return res.status(429).json({ error: "Too many requests. Dev relay rate limit exceeded." });
+    }
+
+    // Reset count every hour
+    setTimeout(() => requestCounts.set(clientIp, (requestCounts.get(clientIp) || 1) - 1), 3600000);
+
+    console.log(`[DEV-RELAY] ${new Date().toISOString()} - ${req.method} ${req.url}`);
+    next();
+});
+
 // Enable CORS for all routes - allow all origins for development
 app.use(cors({
     origin: '*',

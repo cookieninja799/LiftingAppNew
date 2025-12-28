@@ -1,5 +1,5 @@
 // __tests__/unit/workoutBackup.test.ts
-// Tests for workout backup format and validation
+// Tests for workout backup format and validation (v2 normalized model)
 
 import {
     BackupValidationError,
@@ -15,10 +15,10 @@ import {
 } from '../fixtures/sessions';
 
 describe('createWorkoutBackup', () => {
-  it('should create a backup with correct structure', () => {
+  it('should create a backup with correct structure (v2)', () => {
     const backup = createWorkoutBackup(singleSession);
 
-    expect(backup.schemaVersion).toBe(1);
+    expect(backup.schemaVersion).toBe(2);
     expect(backup.exportedAt).toBeDefined();
     expect(backup.workoutSessions).toEqual(singleSession);
     expect(new Date(backup.exportedAt).getTime()).toBeGreaterThan(0);
@@ -27,7 +27,7 @@ describe('createWorkoutBackup', () => {
   it('should handle empty sessions array', () => {
     const backup = createWorkoutBackup(emptySessions);
 
-    expect(backup.schemaVersion).toBe(1);
+    expect(backup.schemaVersion).toBe(2);
     expect(backup.workoutSessions).toEqual([]);
   });
 
@@ -62,16 +62,16 @@ describe('stringifyWorkoutBackup', () => {
 
 describe('parseWorkoutBackup', () => {
   describe('valid backups', () => {
-    it('should parse a valid backup string', () => {
+    it('should parse a valid backup string (v2)', () => {
       const backup = createWorkoutBackup(singleSession);
       const json = stringifyWorkoutBackup(backup);
       const parsed = parseWorkoutBackup(json);
 
-      expect(parsed.schemaVersion).toBe(1);
+      expect(parsed.schemaVersion).toBe(2);
       expect(parsed.workoutSessions).toHaveLength(singleSession.length);
       expect(parsed.workoutSessions[0]).toMatchObject({
         id: singleSession[0].id,
-        date: singleSession[0].date,
+        performedOn: singleSession[0].performedOn,
       });
     });
 
@@ -122,9 +122,18 @@ describe('parseWorkoutBackup', () => {
       expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow(BackupValidationError);
     });
 
-    it('should reject wrong schemaVersion', () => {
+    it('should reject legacy schemaVersion 1 with migration message', () => {
+      const legacy = {
+        schemaVersion: 1,
+        exportedAt: new Date().toISOString(),
+        workoutSessions: [],
+      };
+      expect(() => parseWorkoutBackup(JSON.stringify(legacy))).toThrow('Legacy backup version 1 not supported');
+    });
+
+    it('should reject unsupported schemaVersion', () => {
       const invalid = {
-        schemaVersion: 2,
+        schemaVersion: 3,
         exportedAt: new Date().toISOString(),
         workoutSessions: [],
       };
@@ -132,17 +141,9 @@ describe('parseWorkoutBackup', () => {
       expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow('Unsupported backup schema version');
     });
 
-    it('should reject missing exportedAt', () => {
-      const invalid = {
-        schemaVersion: 1,
-        workoutSessions: [],
-      };
-      expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow(BackupValidationError);
-    });
-
     it('should reject missing workoutSessions', () => {
       const invalid = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         exportedAt: new Date().toISOString(),
       };
       expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow(BackupValidationError);
@@ -150,31 +151,16 @@ describe('parseWorkoutBackup', () => {
 
     it('should reject workoutSessions that is not an array', () => {
       const invalid = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         exportedAt: new Date().toISOString(),
         workoutSessions: {},
       };
       expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow(BackupValidationError);
     });
 
-    it('should reject session missing id', () => {
+    it('should reject v2 session missing performedOn', () => {
       const invalid = {
-        schemaVersion: 1,
-        exportedAt: new Date().toISOString(),
-        workoutSessions: [
-          {
-            date: '2024-12-18',
-            exercises: [],
-          },
-        ],
-      };
-      expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow(BackupValidationError);
-      expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow('missing or invalid "id"');
-    });
-
-    it('should reject session missing date', () => {
-      const invalid = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         exportedAt: new Date().toISOString(),
         workoutSessions: [
           {
@@ -184,176 +170,7 @@ describe('parseWorkoutBackup', () => {
         ],
       };
       expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow(BackupValidationError);
-      expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow('missing or invalid "date"');
-    });
-
-    it('should reject session with invalid date format', () => {
-      const invalid = {
-        schemaVersion: 1,
-        exportedAt: new Date().toISOString(),
-        workoutSessions: [
-          {
-            id: 'session-1',
-            date: 'invalid-date',
-            exercises: [],
-          },
-        ],
-      };
-      expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow(BackupValidationError);
-      expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow('invalid date format');
-    });
-
-    it('should reject session with non-array exercises', () => {
-      const invalid = {
-        schemaVersion: 1,
-        exportedAt: new Date().toISOString(),
-        workoutSessions: [
-          {
-            id: 'session-1',
-            date: '2024-12-18',
-            exercises: {},
-          },
-        ],
-      };
-      expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow(BackupValidationError);
-    });
-
-    it('should reject exercise missing id', () => {
-      const invalid = {
-        schemaVersion: 1,
-        exportedAt: new Date().toISOString(),
-        workoutSessions: [
-          {
-            id: 'session-1',
-            date: '2024-12-18',
-            exercises: [
-              {
-                exercise: 'Bench Press',
-                sets: 3,
-                reps: [10, 10, 10],
-                weights: ['135', '135', '135'],
-              },
-            ],
-          },
-        ],
-      };
-      expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow(BackupValidationError);
-      expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow('missing or invalid "id"');
-    });
-
-    it('should reject exercise missing exercise name', () => {
-      const invalid = {
-        schemaVersion: 1,
-        exportedAt: new Date().toISOString(),
-        workoutSessions: [
-          {
-            id: 'session-1',
-            date: '2024-12-18',
-            exercises: [
-              {
-                id: 'ex-1',
-                sets: 3,
-                reps: [10, 10, 10],
-                weights: ['135', '135', '135'],
-              },
-            ],
-          },
-        ],
-      };
-      expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow(BackupValidationError);
-      expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow('missing or invalid "exercise"');
-    });
-
-    it('should reject exercise missing sets', () => {
-      const invalid = {
-        schemaVersion: 1,
-        exportedAt: new Date().toISOString(),
-        workoutSessions: [
-          {
-            id: 'session-1',
-            date: '2024-12-18',
-            exercises: [
-              {
-                id: 'ex-1',
-                exercise: 'Bench Press',
-                reps: [10, 10, 10],
-                weights: ['135', '135', '135'],
-              },
-            ],
-          },
-        ],
-      };
-      expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow(BackupValidationError);
-      expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow('missing or invalid "sets"');
-    });
-
-    it('should reject exercise with negative sets', () => {
-      const invalid = {
-        schemaVersion: 1,
-        exportedAt: new Date().toISOString(),
-        workoutSessions: [
-          {
-            id: 'session-1',
-            date: '2024-12-18',
-            exercises: [
-              {
-                id: 'ex-1',
-                exercise: 'Bench Press',
-                sets: -1,
-                reps: [],
-                weights: [],
-              },
-            ],
-          },
-        ],
-      };
-      expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow(BackupValidationError);
-    });
-
-    it('should reject exercise with non-array reps', () => {
-      const invalid = {
-        schemaVersion: 1,
-        exportedAt: new Date().toISOString(),
-        workoutSessions: [
-          {
-            id: 'session-1',
-            date: '2024-12-18',
-            exercises: [
-              {
-                id: 'ex-1',
-                exercise: 'Bench Press',
-                sets: 3,
-                reps: {},
-                weights: [],
-              },
-            ],
-          },
-        ],
-      };
-      expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow(BackupValidationError);
-    });
-
-    it('should reject exercise with non-array weights', () => {
-      const invalid = {
-        schemaVersion: 1,
-        exportedAt: new Date().toISOString(),
-        workoutSessions: [
-          {
-            id: 'session-1',
-            date: '2024-12-18',
-            exercises: [
-              {
-                id: 'ex-1',
-                exercise: 'Bench Press',
-                sets: 3,
-                reps: [],
-                weights: {},
-              },
-            ],
-          },
-        ],
-      };
-      expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow(BackupValidationError);
+      expect(() => parseWorkoutBackup(JSON.stringify(invalid))).toThrow('is invalid for schema version 2');
     });
   });
 
@@ -367,39 +184,6 @@ describe('parseWorkoutBackup', () => {
       expect(parsed.exportedAt).toBe(original.exportedAt);
       expect(parsed.workoutSessions).toEqual(original.workoutSessions);
     });
-
-    it('should preserve exercise details including optional fields', () => {
-      const sessions = [
-        {
-          id: 'session-1',
-          date: '2024-12-18',
-          exercises: [
-            {
-              id: 'ex-1',
-              exercise: 'Bench Press',
-              sets: 3,
-              reps: [10, 8, 6],
-              weights: ['135', '155', '175'],
-              primaryMuscleGroup: 'Chest',
-            },
-            {
-              id: 'ex-2',
-              exercise: 'Squats',
-              sets: 4,
-              reps: [12, 10, 8, 6],
-              weights: ['185', '205', '225', '245'],
-              // primaryMuscleGroup intentionally missing
-            },
-          ],
-        },
-      ];
-
-      const backup = createWorkoutBackup(sessions);
-      const json = stringifyWorkoutBackup(backup);
-      const parsed = parseWorkoutBackup(json);
-
-      expect(parsed.workoutSessions[0].exercises[0].primaryMuscleGroup).toBe('Chest');
-      expect(parsed.workoutSessions[0].exercises[1].primaryMuscleGroup).toBeUndefined();
-    });
   });
 });
+

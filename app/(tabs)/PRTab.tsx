@@ -1,15 +1,16 @@
+import PRSummaryCards from '@/components/analytics/PRSummaryCards';
 import { useEffectiveColorScheme } from '@/components/theme';
-import { Colors } from '@/constants/Colors';
-import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
-import PRSummaryCards, { PRMetric } from '../../components/analytics/PRSummaryCards';
-import { WorkoutSession } from '../../utils/workoutSessions';
+import { Colors } from '@/constants/Colors';
+import { workoutRepository } from '@/data/WorkoutRepositoryManager';
+import { PRMetric } from '@/utils/pr/calculatePRMetrics';
+import { WorkoutSession } from '@/utils/workoutSessions';
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { ScrollView, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const PRTab: React.FC = () => {
   const colorScheme = useEffectiveColorScheme();
@@ -20,20 +21,20 @@ const PRTab: React.FC = () => {
     const prMetrics: Record<string, PRMetric> = {};
     sessions.forEach(session => {
       session.exercises.forEach(ex => {
-        ex.weights.forEach((weightStr, i) => {
-          const weight = parseFloat(weightStr) || 0;
-          const reps = ex.reps[i] || 0;
-          const key = ex.exercise.toLowerCase();
+        ex.sets.forEach((set) => {
+          const weight = parseFloat(set.weightText.replace(/[^\d.]/g, "")) || 0;
+          const reps = set.reps || 0;
+          const key = ex.nameRaw.toLowerCase();
           if (
             !prMetrics[key] ||
             weight > prMetrics[key].maxWeight ||
             (weight === prMetrics[key].maxWeight && reps > prMetrics[key].reps)
           ) {
             prMetrics[key] = {
-              exercise: ex.exercise,
+              exercise: ex.nameRaw,
               maxWeight: weight,
               reps: reps,
-              date: session.date,
+              date: session.performedOn,
             };
           }
         });
@@ -42,21 +43,36 @@ const PRTab: React.FC = () => {
     return Object.values(prMetrics).sort((a, b) => a.exercise.localeCompare(b.exercise));
   };
 
-  // Using useEffect instead of useFocusEffect to avoid navigation context requirement
-  // Tabs stay mounted, so useEffect will work fine for loading data
-  useEffect(() => {
-    (async () => {
-      try {
-        const storedSessions = await AsyncStorage.getItem('workoutSessions');
-        if (!storedSessions) return;
-        const sessions: WorkoutSession[] = JSON.parse(storedSessions);
-        const computedPRMetrics = calculatePRMetrics(sessions);
-        setPRMetrics(computedPRMetrics);
-      } catch (error) {
-        console.error('Error loading sessions for PR Tab:', error);
-      }
-    })();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        try {
+          const sessions = await workoutRepository.listSessions();
+          console.log('[PRTab] Loaded sessions:', sessions?.length || 0);
+          if (!sessions || sessions.length === 0) {
+            setPRMetrics([]);
+            return;
+          }
+          
+          // Debug: Check if sessions have exercises and sets
+          const sessionsWithData = sessions.filter(s => s.exercises && s.exercises.length > 0);
+          console.log('[PRTab] Sessions with exercises:', sessionsWithData.length);
+          const totalExercises = sessions.reduce((sum, s) => sum + (s.exercises?.length || 0), 0);
+          const totalSets = sessions.reduce((sum, s) => 
+            sum + s.exercises.reduce((exSum, ex) => exSum + (ex.sets?.length || 0), 0), 0
+          );
+          console.log('[PRTab] Total exercises:', totalExercises, 'Total sets:', totalSets);
+          
+          const computedPRMetrics = calculatePRMetrics(sessions);
+          console.log('[PRTab] Computed PR metrics:', computedPRMetrics.length);
+          setPRMetrics(computedPRMetrics);
+        } catch (error) {
+          console.error('Error loading sessions for PR Tab:', error);
+          setPRMetrics([]);
+        }
+      })();
+    }, [])
+  );
 
   const filteredMetrics = useMemo(() => {
     if (!searchQuery.trim()) return prMetrics;

@@ -14,13 +14,17 @@ describe('StatsOverview', () => {
   it('should render all stat values', () => {
     render(<StatsOverview stats={defaultStats} />);
 
-    expect(screen.getByText(/Total Workout Days: 15/)).toBeTruthy();
-    expect(screen.getByText(/Most Common Exercise: Bench Press/)).toBeTruthy();
-    expect(screen.getByText(/Average Exercises per Day: 4.5/)).toBeTruthy();
-    expect(screen.getByText(/Average Sets per Day: 12.3/)).toBeTruthy();
+    expect(screen.getByText('Total Days')).toBeTruthy();
+    expect(screen.getByText('15')).toBeTruthy();
+    expect(screen.getByText('Common Ex')).toBeTruthy();
+    expect(screen.getByText('Bench Press')).toBeTruthy();
+    expect(screen.getByText('Avg Ex/Day')).toBeTruthy();
+    expect(screen.getByText('4.5')).toBeTruthy();
+    expect(screen.getByText('Avg Sets/Day')).toBeTruthy();
+    expect(screen.getByText('12.3')).toBeTruthy();
   });
 
-  it('should render Overview subtitle', () => {
+  it('should render Overview title', () => {
     render(<StatsOverview stats={defaultStats} />);
 
     expect(screen.getByText('Overview')).toBeTruthy();
@@ -34,7 +38,8 @@ describe('StatsOverview', () => {
 
     render(<StatsOverview stats={stats} />);
 
-    expect(screen.getByText(/Most Common Exercise: N\/A/)).toBeTruthy();
+    expect(screen.getByText('Common Ex')).toBeTruthy();
+    expect(screen.getByText('N/A')).toBeTruthy();
   });
 
   it('should format decimal values to one decimal place', () => {
@@ -48,8 +53,8 @@ describe('StatsOverview', () => {
     render(<StatsOverview stats={stats} />);
 
     // toFixed(1) should round appropriately
-    expect(screen.getByText(/Average Exercises per Day: 3.3/)).toBeTruthy();
-    expect(screen.getByText(/Average Sets per Day: 10.0/)).toBeTruthy();
+    expect(screen.getByText('3.3')).toBeTruthy();
+    expect(screen.getByText('10.0')).toBeTruthy();
   });
 
   it('should handle zero values', () => {
@@ -62,9 +67,8 @@ describe('StatsOverview', () => {
 
     render(<StatsOverview stats={stats} />);
 
-    expect(screen.getByText(/Total Workout Days: 0/)).toBeTruthy();
-    expect(screen.getByText(/Average Exercises per Day: 0.0/)).toBeTruthy();
-    expect(screen.getByText(/Average Sets per Day: 0.0/)).toBeTruthy();
+    expect(screen.getByText('0')).toBeTruthy();
+    expect(screen.getAllByText('0.0').length).toBe(2);
   });
 
   it('should handle large numbers', () => {
@@ -77,8 +81,8 @@ describe('StatsOverview', () => {
 
     render(<StatsOverview stats={stats} />);
 
-    expect(screen.getByText(/Total Workout Days: 1000/)).toBeTruthy();
-    expect(screen.getByText(/Average Exercises per Day: 100.5/)).toBeTruthy();
-    expect(screen.getByText(/Average Sets per Day: 500.9/)).toBeTruthy();
+    expect(screen.getByText('1000')).toBeTruthy();
+    expect(screen.getByText('100.5')).toBeTruthy();
+    expect(screen.getByText('500.9')).toBeTruthy();
   });
 });

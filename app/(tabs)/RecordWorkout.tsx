@@ -22,24 +22,9 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Text } from '@/components/ui/text';
 import { getApiBaseUrl } from '@/utils/helpers';
-import { Exercise, WorkoutSession } from '@/utils/workoutSessions';
-
-type MuscleContribution = {
-  muscleGroup: string;
-  fraction: number;
-  isDirect?: boolean;
-};
-
-type ParsedExercise = {
-  id: string;
-  date?: string;
-  exercise?: string;
-  sets?: number;
-  reps?: number[];
-  weights?: string[];
-  primaryMuscleGroup?: string;
-  muscleContributions?: MuscleContribution[];
-};
+import { WorkoutSession, mergeExercisesIntoSessions, sortSessionsByDateDesc } from '@/utils/workoutSessions';
+import { workoutRepository } from '@/data/WorkoutRepositoryManager';
+import { parseAssistantResponse, ParsedExercise } from '@/utils/assistantParsing';
 
 export default function RecordWorkout() {
   const colorScheme = useEffectiveColorScheme();
@@ -83,10 +68,8 @@ export default function RecordWorkout() {
     React.useCallback(() => {
       const loadSessions = async () => {
         try {
-          const storedSessions = await AsyncStorage.getItem('workoutSessions');
-          if (storedSessions) {
-            setSessions(JSON.parse(storedSessions));
-          }
+          const sessions = await workoutRepository.listSessions();
+          setSessions(sessions);
         } catch (error) {
           console.error('Failed to load workout sessions:', error);
         }
@@ -94,14 +77,6 @@ export default function RecordWorkout() {
       loadSessions();
     }, [])
   );
-
-  const saveSessions = async (updatedSessions: WorkoutSession[]) => {
-    try {
-      await AsyncStorage.setItem('workoutSessions', JSON.stringify(updatedSessions));
-    } catch (error) {
-      console.error('Failed to save workout sessions:', error);
-    }
-  };
 
   const parseInputWithAssistant = async (userInput: string): Promise<ParsedExercise[] | null> => {
     if (!threadId) {
@@ -115,68 +90,7 @@ export default function RecordWorkout() {
         message: userInput,
       });
 
-      const jsonMessages = response.data?.messages?.flat()?.filter((msg: any) => {
-        const trimmed = msg?.text?.value?.trim();
-        return msg?.type === 'text' && (trimmed.startsWith('{') || trimmed.startsWith('['));
-      });
-
-      if (!jsonMessages.length) {
-        console.error('No valid JSON messages found in response:', response.data);
-        Alert.alert('Error', 'Unexpected response format. Please try again.');
-        return null;
-      }
-
-      const parsedExercises: ParsedExercise[] = [];
-
-      jsonMessages.forEach((msg: any) => {
-        try {
-          const trimmedText = msg.text.value.trim();
-          const parsed = JSON.parse(trimmedText);
-
-          if (Array.isArray(parsed)) {
-            parsed.forEach((exercise: any) => {
-              parsedExercises.push({
-                id: generateId(),
-                date: exercise.date || getTodayDate(),
-                exercise: exercise.exercise || 'Unknown Exercise',
-                sets: exercise.sets || 1,
-                reps: Array.isArray(exercise.reps) ? exercise.reps : [],
-                weights: Array.isArray(exercise.weights) ? exercise.weights : [],
-                primaryMuscleGroup: exercise.primaryMuscleGroup,
-                muscleContributions: Array.isArray(exercise.muscleContributions) ? exercise.muscleContributions : undefined,
-              });
-            });
-          } else if (parsed.exercises && Array.isArray(parsed.exercises)) {
-            parsed.exercises.forEach((exercise: any) => {
-              parsedExercises.push({
-                id: generateId(),
-                date: exercise.date || getTodayDate(),
-                exercise: exercise.exercise || 'Unknown Exercise',
-                sets: exercise.sets || 1,
-                reps: Array.isArray(exercise.reps) ? exercise.reps : [],
-                weights: Array.isArray(exercise.weights) ? exercise.weights : [],
-                primaryMuscleGroup: exercise.primaryMuscleGroup,
-                muscleContributions: Array.isArray(exercise.muscleContributions) ? exercise.muscleContributions : undefined,
-              });
-            });
-          } else {
-            parsedExercises.push({
-              id: generateId(),
-              date: parsed.date || getTodayDate(),
-              exercise: parsed.exercise || 'Unknown Exercise',
-              sets: parsed.sets || 1,
-              reps: Array.isArray(parsed.reps) ? parsed.reps : [],
-              weights: Array.isArray(parsed.weights) ? parsed.weights : [],
-              primaryMuscleGroup: parsed.primaryMuscleGroup,
-              muscleContributions: Array.isArray(parsed.muscleContributions) ? parsed.muscleContributions : undefined,
-            });
-          }
-        } catch (error) {
-          console.error('Error parsing JSON response:', error);
-        }
-      });
-
-      return parsedExercises;
+      return parseAssistantResponse(response.data);
     } catch (error) {
       console.error('Error parsing input with assistant:', error);
       Alert.alert('Error', 'Failed to parse input. Please try again.');
@@ -195,34 +109,14 @@ export default function RecordWorkout() {
     setIsLoading(false);
 
     if (parsedExercises && parsedExercises.length > 0) {
-      let updatedSessions = [...sessions];
-
-      parsedExercises.forEach(parsedResult => {
-        const sessionDate = parsedResult.date!;
-        const newExercise: Exercise = {
-          id: parsedResult.id,
-          exercise: parsedResult.exercise!,
-          sets: parsedResult.sets!,
-          reps: parsedResult.reps || [],
-          weights: parsedResult.weights || [],
-          primaryMuscleGroup: parsedResult.primaryMuscleGroup,
-          muscleContributions: parsedResult.muscleContributions,
-        };
-
-        const existingSessionIndex = updatedSessions.findIndex(session => session.date === sessionDate);
-        if (existingSessionIndex !== -1) {
-          updatedSessions[existingSessionIndex].exercises.push(newExercise);
-        } else {
-          updatedSessions.push({
-            id: generateId(),
-            date: sessionDate,
-            exercises: [newExercise],
-          });
-        }
-      });
+      const updatedSessions = mergeExercisesIntoSessions(sessions, parsedExercises);
+      
+      // Save all updated/new sessions
+      for (const session of updatedSessions) {
+        await workoutRepository.upsertSession(session);
+      }
 
       setSessions(updatedSessions);
-      saveSessions(updatedSessions);
       setInput('');
     } else {
       Alert.alert('Error', 'Failed to log workout.');
@@ -280,13 +174,12 @@ export default function RecordWorkout() {
               </CardContent>
             </Card>
           ) : (
-            sessions
-              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            sortSessionsByDateDesc(sessions)
               .slice(0, 5)
               .map((session, idx) => (
                 <Card key={session.id}>
                   <CardHeader className="flex-row items-center justify-between py-3">
-                    <Text className="font-bold">{new Date(session.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</Text>
+                    <Text className="font-bold">{new Date(session.performedOn).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</Text>
                     <Badge variant="secondary" label={`${session.exercises.length} exercises`} />
                   </CardHeader>
                   <Separator />
@@ -294,9 +187,9 @@ export default function RecordWorkout() {
                     {session.exercises.map((ex, exIdx) => (
                       <View key={ex.id} className="flex-row items-center justify-between">
                         <View className="flex-1">
-                          <Text className="font-medium">{ex.exercise}</Text>
+                          <Text className="font-medium">{ex.nameRaw}</Text>
                           <Text variant="muted" className="text-xs">
-                            {ex.sets} sets • {ex.reps.join(', ')} reps
+                            {ex.sets.length} sets • {ex.sets.map(s => s.reps).join(', ')} reps
                           </Text>
                         </View>
                         {ex.primaryMuscleGroup && (
