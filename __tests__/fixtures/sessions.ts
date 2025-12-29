@@ -55,7 +55,6 @@ export const singleSession: WorkoutSession[] = [
     ],
     updatedAt: now,
     createdAt: now,
-    deletedAt: null,
   },
 ];
 
@@ -88,7 +87,6 @@ export const multipleSessions: WorkoutSession[] = [
     ],
     updatedAt: now,
     createdAt: now,
-    deletedAt: null,
   },
   {
     id: 'session-2',
@@ -115,7 +113,6 @@ export const multipleSessions: WorkoutSession[] = [
     ],
     updatedAt: now,
     createdAt: now,
-    deletedAt: null,
   },
   {
     id: 'session-3',
@@ -133,7 +130,6 @@ export const multipleSessions: WorkoutSession[] = [
     ],
     updatedAt: now,
     createdAt: now,
-    deletedAt: null,
   },
 ];
 
@@ -157,7 +153,6 @@ export const prTestSessions: WorkoutSession[] = [
     ],
     updatedAt: now,
     createdAt: now,
-    deletedAt: null,
   },
   {
     id: 'session-2',
@@ -175,7 +170,6 @@ export const prTestSessions: WorkoutSession[] = [
     ],
     updatedAt: now,
     createdAt: now,
-    deletedAt: null,
   },
   {
     id: 'session-3',
@@ -193,7 +187,6 @@ export const prTestSessions: WorkoutSession[] = [
     ],
     updatedAt: now,
     createdAt: now,
-    deletedAt: null,
   },
   {
     id: 'session-4',
@@ -211,7 +204,6 @@ export const prTestSessions: WorkoutSession[] = [
     ],
     updatedAt: now,
     createdAt: now,
-    deletedAt: null,
   },
 ];
 
@@ -244,7 +236,6 @@ export const bodyweightSessions: WorkoutSession[] = [
     ],
     updatedAt: now,
     createdAt: now,
-    deletedAt: null,
   },
 ];
 
@@ -277,7 +268,6 @@ export const sessionsWithMissingMuscleGroup: WorkoutSession[] = [
     ],
     updatedAt: now,
     createdAt: now,
-    deletedAt: null,
   },
 ];
 
@@ -302,7 +292,6 @@ export const multiWeekSessions: WorkoutSession[] = [
     ],
     updatedAt: now,
     createdAt: now,
-    deletedAt: null,
   },
   {
     id: 'session-w51-2',
@@ -320,7 +309,6 @@ export const multiWeekSessions: WorkoutSession[] = [
     ],
     updatedAt: now,
     createdAt: now,
-    deletedAt: null,
   },
   // Week 50 (Dec 9-15, 2024)
   {
@@ -339,7 +327,6 @@ export const multiWeekSessions: WorkoutSession[] = [
     ],
     updatedAt: now,
     createdAt: now,
-    deletedAt: null,
   },
   // Week 49 (Dec 2-8, 2024)
   {
@@ -358,7 +345,6 @@ export const multiWeekSessions: WorkoutSession[] = [
     ],
     updatedAt: now,
     createdAt: now,
-    deletedAt: null,
   },
 ];
 
@@ -403,7 +389,6 @@ export const fractionalSetsSessions: WorkoutSession[] = [
     ],
     updatedAt: now,
     createdAt: now,
-    deletedAt: null,
   },
 ];
 
@@ -436,7 +421,6 @@ export const uncategorizedExercisesSessions: WorkoutSession[] = [
     ],
     updatedAt: now,
     createdAt: now,
-    deletedAt: null,
   },
 ];
 
@@ -464,7 +448,6 @@ export const sessionsWithMuscleContributions: WorkoutSession[] = [
     ],
     updatedAt: now,
     createdAt: now,
-    deletedAt: null,
   },
 ];
 

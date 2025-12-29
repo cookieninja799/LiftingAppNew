@@ -4,6 +4,7 @@ import { SyncEngine } from '../../data/SyncEngine';
 import { CloudWorkoutRepository } from '../../data/CloudWorkoutRepository';
 import { LocalWorkoutRepository } from '../../data/LocalWorkoutRepository';
 import { WorkoutSession } from '../../utils/workoutSessions';
+import { supabase } from '../../lib/supabase';
 
 // Mock AsyncStorage
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -14,6 +15,13 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 // Mock repository classes
 jest.mock('../../data/CloudWorkoutRepository');
 jest.mock('../../data/LocalWorkoutRepository');
+jest.mock('../../lib/supabase', () => ({
+  supabase: {
+    auth: {
+      getUser: jest.fn(),
+    },
+  },
+}));
 
 describe('SyncEngine', () => {
   let syncEngine: SyncEngine;
@@ -21,25 +29,27 @@ describe('SyncEngine', () => {
   let mockLocalRepo: jest.Mocked<LocalWorkoutRepository>;
   const mockGetItem = AsyncStorage.getItem as jest.MockedFunction<typeof AsyncStorage.getItem>;
   const mockSetItem = AsyncStorage.setItem as jest.MockedFunction<typeof AsyncStorage.setItem>;
+  const mockGetUser = supabase.auth.getUser as jest.MockedFunction<typeof supabase.auth.getUser>;
 
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetItem.mockResolvedValue(null);
     mockSetItem.mockResolvedValue(undefined);
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'user-123' } } } as any);
 
     // Create mock instances
     mockCloudRepo = {
       listSessions: jest.fn(),
       getWorkoutSession: jest.fn(),
       upsertSession: jest.fn(),
-      softDeleteSession: jest.fn(),
+      deleteSession: jest.fn(),
     } as any;
 
     mockLocalRepo = {
       listSessions: jest.fn(),
       getWorkoutSession: jest.fn(),
       upsertSession: jest.fn(),
-      softDeleteSession: jest.fn(),
+      deleteSession: jest.fn(),
     } as any;
 
     // Mock constructors to return our mock instances
@@ -59,7 +69,6 @@ describe('SyncEngine', () => {
           exercises: [],
           updatedAt: now,
           createdAt: now,
-          deletedAt: null,
         },
       ];
 
@@ -70,7 +79,7 @@ describe('SyncEngine', () => {
       await syncEngine.migrateLocalToCloud();
 
       expect(mockCloudRepo.upsertSession).toHaveBeenCalledWith(localSessions[0]);
-      expect(mockSetItem).toHaveBeenCalledWith('has_migrated_to_cloud', 'true');
+      expect(mockSetItem).toHaveBeenCalledWith('has_migrated_to_cloud:user-123', 'true');
     });
 
     it('should not migrate if already migrated', async () => {
@@ -91,7 +100,6 @@ describe('SyncEngine', () => {
           exercises: [],
           updatedAt: now,
           createdAt: now,
-          deletedAt: null,
         },
         {
           id: 'local-2',
@@ -99,7 +107,6 @@ describe('SyncEngine', () => {
           exercises: [],
           updatedAt: now,
           createdAt: now,
-          deletedAt: null,
         },
       ];
 
@@ -113,7 +120,7 @@ describe('SyncEngine', () => {
       await syncEngine.migrateLocalToCloud();
 
       // Should still mark as migrated even if one session failed
-      expect(mockSetItem).toHaveBeenCalledWith('has_migrated_to_cloud', 'true');
+      expect(mockSetItem).toHaveBeenCalledWith('has_migrated_to_cloud:user-123', 'true');
     });
   });
 
@@ -127,7 +134,6 @@ describe('SyncEngine', () => {
           exercises: [],
           updatedAt: now,
           createdAt: now,
-          deletedAt: null,
         },
       ];
 
@@ -152,7 +158,6 @@ describe('SyncEngine', () => {
           exercises: [],
           updatedAt: now,
           createdAt: now,
-          deletedAt: null,
         },
       ];
 
@@ -178,7 +183,6 @@ describe('SyncEngine', () => {
         exercises: [],
         updatedAt: oldTime,
         createdAt: oldTime,
-        deletedAt: null,
       };
 
       const remoteSession: WorkoutSession = {
@@ -187,7 +191,6 @@ describe('SyncEngine', () => {
         exercises: [],
         updatedAt: newTime, // Newer
         createdAt: oldTime,
-        deletedAt: null,
         title: 'Updated Title',
       };
 
@@ -212,7 +215,6 @@ describe('SyncEngine', () => {
         exercises: [],
         updatedAt: newTime, // Newer
         createdAt: oldTime,
-        deletedAt: null,
         title: 'Local Update',
       };
 
@@ -222,7 +224,6 @@ describe('SyncEngine', () => {
         exercises: [],
         updatedAt: oldTime,
         createdAt: oldTime,
-        deletedAt: null,
       };
 
       mockCloudRepo.listSessions.mockResolvedValue([remoteSession]);
@@ -245,7 +246,6 @@ describe('SyncEngine', () => {
         exercises: [],
         updatedAt: sameTime,
         createdAt: sameTime,
-        deletedAt: null,
       };
 
       const remoteSession: WorkoutSession = {
@@ -254,7 +254,6 @@ describe('SyncEngine', () => {
         exercises: [],
         updatedAt: sameTime,
         createdAt: sameTime,
-        deletedAt: null,
       };
 
       mockCloudRepo.listSessions.mockResolvedValue([remoteSession]);
@@ -277,7 +276,7 @@ describe('SyncEngine', () => {
       await syncEngine.syncNow();
 
       expect(mockSetItem).toHaveBeenCalledWith(
-        'last_sync_at',
+        'last_sync_at:user-123',
         expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/)
       );
     });
@@ -302,7 +301,7 @@ describe('SyncEngine', () => {
       const result = await syncEngine.getLastSyncTime();
 
       expect(result).toBe(syncTime);
-      expect(mockGetItem).toHaveBeenCalledWith('last_sync_at');
+      expect(mockGetItem).toHaveBeenCalledWith('last_sync_at:user-123');
     });
 
     it('should return null if never synced', async () => {

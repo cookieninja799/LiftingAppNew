@@ -46,7 +46,6 @@ export type WorkoutSession = {
   exercises: WorkoutExercise[];
   updatedAt: string;
   createdAt: string;
-  deletedAt?: string | null;
 };
 
 /**
@@ -93,7 +92,6 @@ export function mergeExercisesIntoSessions(
         exercises: [],
         updatedAt: now,
         createdAt: now,
-        deletedAt: null,
         source: 'ai_parsing'
       };
       updatedSessions.push(session);

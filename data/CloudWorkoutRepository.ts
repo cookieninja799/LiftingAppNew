@@ -1,7 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { WorkoutRepository } from './WorkoutRepository';
 import { WorkoutSession, WorkoutExercise, WorkoutSet } from '../utils/workoutSessions';
-import { defaultIdFactory } from '../utils/assistantParsing';
 
 /**
  * Validates if a string is a valid UUID v4 format
@@ -9,22 +8,6 @@ import { defaultIdFactory } from '../utils/assistantParsing';
 function isValidUUID(id: string): boolean {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return uuidRegex.test(id);
-}
-
-/**
- * Converts a non-UUID ID to a UUID v4 format
- * Generates a new UUID (non-UUID IDs will get new UUIDs on each sync)
- */
-function convertToUUID(id: string): string {
-  if (isValidUUID(id)) {
-    return id;
-  }
-  
-  // Generate a new UUID for non-UUID IDs
-  // Note: This means the same non-UUID ID will get a different UUID each time
-  // For existing sessions, this is acceptable as they'll be treated as new entities
-  console.warn(`Converting non-UUID ID "${id}" to UUID format`);
-  return defaultIdFactory();
 }
 
 export class CloudWorkoutRepository implements WorkoutRepository {
@@ -42,7 +25,6 @@ export class CloudWorkoutRepository implements WorkoutRepository {
         )
       `)
       .eq('user_id', user.id)
-      .is('deleted_at', null)
       .order('performed_on', { ascending: false });
 
     if (error) {
@@ -77,45 +59,20 @@ export class CloudWorkoutRepository implements WorkoutRepository {
   }
 
   /**
-   * Finds the actual database session ID, handling non-UUID IDs by looking up by performed_on date
+   * Validates IDs before writing to the database
    */
-  private async findSessionId(session: WorkoutSession, user: any): Promise<string | null> {
-    if (isValidUUID(session.id)) {
-      // Verify the UUID session exists
-      const { data } = await supabase
-        .from('workout_sessions')
-        .select('id')
-        .eq('id', session.id)
-        .eq('user_id', user.id)
-        .single();
-      return data?.id || null;
+  private assertValidId(id: string, context: string) {
+    if (!isValidUUID(id)) {
+      throw new Error(`${context} must be a valid UUID v4`);
     }
-
-    // Non-UUID ID - look up by performed_on date
-    const { data } = await supabase
-      .from('workout_sessions')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('performed_on', session.performedOn)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-
-    return data?.id || null;
   }
 
   async upsertSession(session: WorkoutSession): Promise<void> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
 
-    // Find the actual database session ID (handles non-UUID IDs)
-    let sessionId = await this.findSessionId(session, user);
-    
-    // If session doesn't exist, create a new UUID for it
-    if (!sessionId) {
-      sessionId = isValidUUID(session.id) ? session.id : convertToUUID(session.id);
-    }
+    this.assertValidId(session.id, 'Session id');
+    const sessionId = session.id;
     
     // Get existing exercises for this session to identify which ones were deleted
     const { data: existingExercises } = await supabase
@@ -135,7 +92,6 @@ export class CloudWorkoutRepository implements WorkoutRepository {
         source: session.source,
         updated_at: session.updatedAt,
         created_at: session.createdAt,
-        deleted_at: session.deletedAt,
       });
 
     if (sessionError) {
@@ -149,7 +105,8 @@ export class CloudWorkoutRepository implements WorkoutRepository {
       const exerciseIdMap = new Map<string, string>();
       const exercisesToUpsert = session.exercises.map(ex => {
         const originalId = ex.id;
-        const exerciseId = isValidUUID(originalId) ? originalId : convertToUUID(originalId);
+        this.assertValidId(originalId, 'Exercise id');
+        const exerciseId = originalId;
         exerciseIdMap.set(originalId, exerciseId);
         return {
           id: exerciseId,
@@ -191,7 +148,7 @@ export class CloudWorkoutRepository implements WorkoutRepository {
       // 3. Upsert Sets - verify exercises exist and use their database IDs
       for (const ex of session.exercises) {
         const originalId = ex.id;
-        const exerciseId = finalExerciseIdMap.get(originalId) || exerciseIdMap.get(originalId) || (isValidUUID(originalId) ? originalId : convertToUUID(originalId));
+        const exerciseId = finalExerciseIdMap.get(originalId) || exerciseIdMap.get(originalId) || originalId;
         
         // Verify the exercise exists and belongs to the user before inserting sets
         const { data: exerciseExists } = await supabase
@@ -208,7 +165,8 @@ export class CloudWorkoutRepository implements WorkoutRepository {
         
         if (ex.sets.length > 0) {
           const setsToUpsert = ex.sets.map(set => {
-            const setId = isValidUUID(set.id) ? set.id : convertToUUID(set.id);
+            this.assertValidId(set.id, 'Set id');
+            const setId = set.id;
             return {
               id: setId,
               exercise_id: exerciseId,
@@ -307,40 +265,18 @@ export class CloudWorkoutRepository implements WorkoutRepository {
     }
   }
 
-  async softDeleteSession(id: string): Promise<void> {
+  async deleteSession(id: string): Promise<void> {
+    this.assertValidId(id, 'Session id');
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
-
-    let sessionId: string | null = null;
-
-    if (isValidUUID(id)) {
-      // Verify the UUID session exists and belongs to the user
-      const { data } = await supabase
-        .from('workout_sessions')
-        .select('id')
-        .eq('id', id)
-        .eq('user_id', user.id)
-        .single();
-      sessionId = data?.id || null;
-    }
-
-    // If not found by UUID, try to find by getting the session from local and matching by performed_on
-    // This is a fallback for non-UUID IDs
-    if (!sessionId) {
-      // We can't easily look up by non-UUID ID, so we'll need to get the session first
-      // For now, if it's not a UUID, we'll skip cloud deletion (local will handle it)
-      console.warn(`Cannot soft delete session with non-UUID ID "${id}" in cloud - skipping cloud deletion`);
-      return;
-    }
-    
-    const now = new Date().toISOString();
     const { error } = await supabase
       .from('workout_sessions')
-      .update({ deleted_at: now, updated_at: now })
-      .eq('id', sessionId);
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id);
 
     if (error) {
-      console.error('Error soft deleting session:', error);
+      console.error('Error deleting session:', error);
       throw error;
     }
   }
@@ -355,7 +291,6 @@ export class CloudWorkoutRepository implements WorkoutRepository {
       source: dbSession.source,
       updatedAt: dbSession.updated_at,
       createdAt: dbSession.created_at,
-      deletedAt: dbSession.deleted_at,
       exercises: (dbSession.workout_exercises || []).map((ex: any) => ({
         id: ex.id,
         sessionId: ex.session_id,

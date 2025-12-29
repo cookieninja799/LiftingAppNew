@@ -68,7 +68,7 @@ describe('LocalWorkoutRepository', () => {
       });
     });
 
-    it('should preserve exercise IDs during migration', async () => {
+    it('should canonicalize IDs to UUID v4 during migration', async () => {
       const v0Data = [
         {
           id: 'existing-session-id',
@@ -95,8 +95,9 @@ describe('LocalWorkoutRepository', () => {
       await repository.listSessions();
 
       const savedData = JSON.parse(mockSetItem.mock.calls[0][1] as string);
-      expect(savedData[0].id).toBe('existing-session-id');
-      expect(savedData[0].exercises[0].id).toBe('existing-ex-id');
+      // IDs should be converted to UUID v4 format
+      expect(savedData[0].id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+      expect(savedData[0].exercises[0].id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     });
 
     it('should generate IDs for sessions/exercises that lack them', async () => {
@@ -158,13 +159,12 @@ describe('LocalWorkoutRepository', () => {
       const savedData = JSON.parse(mockSetItem.mock.calls[0][1] as string);
       expect(savedData[0].updatedAt).toBeDefined();
       expect(savedData[0].createdAt).toBeDefined();
-      expect(savedData[0].deletedAt).toBeNull();
       expect(savedData[0].exercises[0].updatedAt).toBeDefined();
       expect(savedData[0].exercises[0].sets[0].updatedAt).toBeDefined();
     });
 
-    it('should not migrate if already on v1', async () => {
-      const v1Data = [
+    it('should not migrate if already on current version', async () => {
+      const v2Data = [
         {
           id: 'session-1',
           performedOn: '2024-12-18',
@@ -191,13 +191,12 @@ describe('LocalWorkoutRepository', () => {
           ],
           updatedAt: '2024-12-18T12:00:00.000Z',
           createdAt: '2024-12-18T12:00:00.000Z',
-          deletedAt: null,
         },
       ];
 
       mockGetItem
-        .mockResolvedValueOnce('v1') // Already migrated
-        .mockResolvedValueOnce(JSON.stringify(v1Data));
+        .mockResolvedValueOnce('v2') // Already migrated
+        .mockResolvedValueOnce(JSON.stringify(v2Data));
 
       const sessions = await repository.listSessions();
 
@@ -207,8 +206,8 @@ describe('LocalWorkoutRepository', () => {
     });
   });
 
-  describe('Soft delete handling', () => {
-    it('should exclude soft-deleted sessions from listSessions', async () => {
+  describe('Delete handling', () => {
+    it('should remove a session when deleteSession is called', async () => {
       const now = new Date().toISOString();
       const sessions: WorkoutSession[] = [
         {
@@ -217,7 +216,6 @@ describe('LocalWorkoutRepository', () => {
           exercises: [],
           updatedAt: now,
           createdAt: now,
-          deletedAt: null,
         },
         {
           id: 'session-2',
@@ -225,45 +223,21 @@ describe('LocalWorkoutRepository', () => {
           exercises: [],
           updatedAt: now,
           createdAt: now,
-          deletedAt: now, // Soft deleted
         },
       ];
 
       mockGetItem
-        .mockResolvedValueOnce('v1')
-        .mockResolvedValueOnce(JSON.stringify(sessions));
-
-      const result = await repository.listSessions();
-
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('session-1');
-    });
-
-    it('should soft delete a session', async () => {
-      const now = new Date().toISOString();
-      const sessions: WorkoutSession[] = [
-        {
-          id: 'session-1',
-          performedOn: '2024-12-18',
-          exercises: [],
-          updatedAt: now,
-          createdAt: now,
-          deletedAt: null,
-        },
-      ];
-
-      mockGetItem
-        .mockResolvedValueOnce('v1')
+        .mockResolvedValueOnce('v2')
         .mockResolvedValueOnce(JSON.stringify(sessions));
 
       mockSetItem.mockResolvedValue(undefined);
 
-      await repository.softDeleteSession('session-1');
+      await repository.deleteSession('session-2');
 
       expect(mockSetItem).toHaveBeenCalled();
       const savedData = JSON.parse(mockSetItem.mock.calls[0][1] as string);
-      expect(savedData[0].deletedAt).toBeDefined();
-      expect(savedData[0].deletedAt).not.toBeNull();
+      expect(savedData).toHaveLength(1);
+      expect(savedData[0].id).toBe('session-1');
     });
   });
 
@@ -277,7 +251,6 @@ describe('LocalWorkoutRepository', () => {
           exercises: [],
           updatedAt: now,
           createdAt: now,
-          deletedAt: null,
         },
       ];
 
@@ -287,12 +260,11 @@ describe('LocalWorkoutRepository', () => {
         exercises: [],
         updatedAt: now,
         createdAt: now,
-        deletedAt: null,
         title: 'Updated Title',
       };
 
       mockGetItem
-        .mockResolvedValueOnce('v1')
+        .mockResolvedValueOnce('v2')
         .mockResolvedValueOnce(JSON.stringify(existing));
 
       mockSetItem.mockResolvedValue(undefined);
@@ -309,18 +281,17 @@ describe('LocalWorkoutRepository', () => {
 
     it('should create new session if not exists', async () => {
       mockGetItem
-        .mockResolvedValueOnce('v1')
+        .mockResolvedValueOnce('v2')
         .mockResolvedValueOnce(JSON.stringify([]));
 
       mockSetItem.mockResolvedValue(undefined);
 
       const newSession: WorkoutSession = {
-        id: 'new-session',
+        id: 'a1b2c3d4-e5f6-4789-a012-3456789abcde', // Valid UUID v4
         performedOn: '2024-12-19',
         exercises: [],
         updatedAt: new Date().toISOString(),
         createdAt: new Date().toISOString(),
-        deletedAt: null,
       };
 
       await repository.upsertSession(newSession);
@@ -328,7 +299,7 @@ describe('LocalWorkoutRepository', () => {
       expect(mockSetItem).toHaveBeenCalled();
       const savedData = JSON.parse(mockSetItem.mock.calls[0][1] as string);
       expect(savedData).toHaveLength(1);
-      expect(savedData[0].id).toBe('new-session');
+      expect(savedData[0].id).toBe('a1b2c3d4-e5f6-4789-a012-3456789abcde');
     });
   });
 });

@@ -5,49 +5,55 @@ import { defaultIdFactory } from '../utils/assistantParsing';
 
 const WORKOUT_SESSIONS_KEY = 'workoutSessions';
 const MIGRATION_VERSION_KEY = 'workout_data_version';
-const CURRENT_VERSION = 'v1';
+const CURRENT_VERSION = 'v2';
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isValidUUID(id?: string): boolean {
+  return typeof id === 'string' && UUID_REGEX.test(id);
+}
 
 export class LocalWorkoutRepository implements WorkoutRepository {
-  async listSessions(includeDeleted = false): Promise<WorkoutSession[]> {
+  async listSessions(): Promise<WorkoutSession[]> {
     await this.ensureMigration();
-    const data = await AsyncStorage.getItem(WORKOUT_SESSIONS_KEY);
-    if (!data) return [];
-    const sessions: WorkoutSession[] = JSON.parse(data);
-    if (includeDeleted) return sessions;
-    return sessions.filter(s => !s.deletedAt);
+    return this.readSessions();
   }
 
   async getWorkoutSession(id: string): Promise<WorkoutSession | null> {
-    const sessions = await this.listSessions(true); // Check all
+    const sessions = await this.listSessions();
     return sessions.find(s => s.id === id) || null;
   }
 
   async upsertSession(session: WorkoutSession): Promise<void> {
-    const sessions = await this.listSessions(true); // Get all including deleted
-    const index = sessions.findIndex(s => s.id === session.id);
-    
-    const updatedSession = {
+    const sessions = await this.listSessions();
+    const now = new Date().toISOString();
+
+    const nextSessions = [...sessions];
+    const existingIndex = nextSessions.findIndex(s => s.id === session.id);
+    const mergedSession: WorkoutSession = {
       ...session,
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
+      createdAt: session.createdAt || now,
     };
 
-    if (index !== -1) {
-      sessions[index] = updatedSession;
+    if (existingIndex >= 0) {
+      nextSessions[existingIndex] = {
+        ...nextSessions[existingIndex],
+        ...mergedSession,
+      };
     } else {
-      sessions.push(updatedSession);
+      nextSessions.push(mergedSession);
     }
 
-    await AsyncStorage.setItem(WORKOUT_SESSIONS_KEY, JSON.stringify(sessions));
+    const canonicalized = this.canonicalizeSessions(nextSessions);
+    await AsyncStorage.setItem(WORKOUT_SESSIONS_KEY, JSON.stringify(canonicalized));
   }
 
-  async softDeleteSession(id: string): Promise<void> {
-    const sessions = await this.listSessions(true); // Get all
-    const index = sessions.findIndex(s => s.id === id);
-    if (index !== -1) {
-      sessions[index].deletedAt = new Date().toISOString();
-      sessions[index].updatedAt = new Date().toISOString();
-      await AsyncStorage.setItem(WORKOUT_SESSIONS_KEY, JSON.stringify(sessions));
-    }
+  async deleteSession(id: string): Promise<void> {
+    const sessions = await this.listSessions();
+    const remaining = sessions.filter(s => s.id !== id);
+    if (remaining.length === sessions.length) return;
+
+    await AsyncStorage.setItem(WORKOUT_SESSIONS_KEY, JSON.stringify(remaining));
   }
 
   private async ensureMigration() {
@@ -62,18 +68,24 @@ export class LocalWorkoutRepository implements WorkoutRepository {
 
     try {
       const rawData = JSON.parse(data);
+      let sessions: WorkoutSession[] = [];
+
       if (Array.isArray(rawData) && rawData.length > 0) {
-        // Check if first element is v0
         const first = rawData[0];
         if (first.date && !first.performedOn) {
           console.log('Migrating workout data from v0 to v1...');
-          const migrated = this.migrateV0ToV1(rawData);
-          await AsyncStorage.setItem(WORKOUT_SESSIONS_KEY, JSON.stringify(migrated));
+          sessions = this.migrateV0ToV1(rawData);
+        } else {
+          sessions = rawData;
         }
       }
+
+      const canonicalized = this.canonicalizeSessions(sessions);
+      await AsyncStorage.setItem(WORKOUT_SESSIONS_KEY, JSON.stringify(canonicalized));
       await AsyncStorage.setItem(MIGRATION_VERSION_KEY, CURRENT_VERSION);
     } catch (e) {
       console.error('Migration failed:', e);
+      await AsyncStorage.setItem(MIGRATION_VERSION_KEY, CURRENT_VERSION);
     }
   }
 
@@ -121,9 +133,78 @@ export class LocalWorkoutRepository implements WorkoutRepository {
         exercises,
         updatedAt: now,
         createdAt: now,
-        deletedAt: null,
       };
     });
+  }
+
+  private canonicalizeSessions(sessions: WorkoutSession[]): WorkoutSession[] {
+    const sessionIdMap = new Map<string, string>();
+    const exerciseIdMap = new Map<string, string>();
+    const setIdMap = new Map<string, string>();
+    const now = new Date().toISOString();
+
+    const normalizeId = (rawId: string | undefined, map: Map<string, string>) => {
+      if (rawId && isValidUUID(rawId)) return rawId;
+      const key = rawId || defaultIdFactory();
+      if (!map.has(key)) {
+        map.set(key, defaultIdFactory());
+      }
+      return map.get(key)!;
+    };
+
+    return sessions
+      // Remove any previously soft-deleted sessions
+      .filter(s => !(s as any).deletedAt)
+      .map(session => {
+        const sessionId = normalizeId(session.id, sessionIdMap);
+        const sessionCreatedAt = session.createdAt || now;
+        const sessionUpdatedAt = session.updatedAt || now;
+
+        const exercises = (session.exercises || []).map(ex => {
+          const exerciseId = normalizeId(ex.id, exerciseIdMap);
+
+          const sets = (ex.sets || []).map(set => {
+            const setId = normalizeId(set.id, setIdMap);
+            return {
+              ...set,
+              id: setId,
+              exerciseId,
+              updatedAt: set.updatedAt || now,
+              createdAt: set.createdAt || now,
+            };
+          });
+
+          return {
+            ...ex,
+            id: exerciseId,
+            sessionId,
+            sets,
+            updatedAt: ex.updatedAt || now,
+            createdAt: ex.createdAt || now,
+          };
+        });
+
+        return {
+          id: sessionId,
+          performedOn: session.performedOn,
+          title: session.title,
+          notes: session.notes,
+          source: session.source,
+          exercises,
+          updatedAt: sessionUpdatedAt,
+          createdAt: sessionCreatedAt,
+        };
+      });
+  }
+
+  private async readSessions(): Promise<WorkoutSession[]> {
+    const data = await AsyncStorage.getItem(WORKOUT_SESSIONS_KEY);
+    if (!data) return [];
+    try {
+      return JSON.parse(data) as WorkoutSession[];
+    } catch {
+      return [];
+    }
   }
 }
 

@@ -182,7 +182,7 @@ const Profile: React.FC = () => {
             try {
               const sessions = await workoutRepository.listSessions();
               for (const session of sessions) {
-                await workoutRepository.softDeleteSession(session.id);
+                  await workoutRepository.deleteSession(session.id);
               }
               Alert.alert('Success', 'All workout records have been cleared.');
             } catch (error) {

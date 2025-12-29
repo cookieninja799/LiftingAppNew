@@ -164,7 +164,6 @@ describe('calculateStatsFromSessions', () => {
             ],
             updatedAt: now,
             createdAt: now,
-            deletedAt: null,
           },
         ],
         { currentWeek }
@@ -370,7 +369,6 @@ describe('calculateStatsFromSessions', () => {
           ],
           updatedAt: now,
           createdAt: now,
-          deletedAt: null,
         },
       ];
 

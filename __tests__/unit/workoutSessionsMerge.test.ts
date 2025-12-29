@@ -88,7 +88,6 @@ describe('mergeExercisesIntoSessions', () => {
         ],
         updatedAt: now,
         createdAt: now,
-        deletedAt: null,
       },
     ];
 
@@ -146,7 +145,6 @@ describe('mergeExercisesIntoSessions', () => {
         ],
         updatedAt: now,
         createdAt: now,
-        deletedAt: null,
       },
     ];
 
@@ -202,7 +200,6 @@ describe('mergeExercisesIntoSessions', () => {
         ],
         updatedAt: now,
         createdAt: now,
-        deletedAt: null,
       },
     ];
 
@@ -389,10 +386,10 @@ describe('sortSessionsByDateDesc', () => {
   it('should sort sessions by date in descending order', () => {
     const now = new Date().toISOString();
     const sessions: WorkoutSession[] = [
-      { id: '1', performedOn: '2024-12-15', exercises: [], updatedAt: now, createdAt: now, deletedAt: null },
-      { id: '2', performedOn: '2024-12-18', exercises: [], updatedAt: now, createdAt: now, deletedAt: null },
-      { id: '3', performedOn: '2024-12-10', exercises: [], updatedAt: now, createdAt: now, deletedAt: null },
-      { id: '4', performedOn: '2024-12-17', exercises: [], updatedAt: now, createdAt: now, deletedAt: null },
+      { id: '1', performedOn: '2024-12-15', exercises: [], updatedAt: now, createdAt: now },
+      { id: '2', performedOn: '2024-12-18', exercises: [], updatedAt: now, createdAt: now },
+      { id: '3', performedOn: '2024-12-10', exercises: [], updatedAt: now, createdAt: now },
+      { id: '4', performedOn: '2024-12-17', exercises: [], updatedAt: now, createdAt: now },
     ];
 
     const sorted = sortSessionsByDateDesc(sessions);
@@ -406,8 +403,8 @@ describe('sortSessionsByDateDesc', () => {
   it('should not mutate original array', () => {
     const now = new Date().toISOString();
     const sessions: WorkoutSession[] = [
-      { id: '1', performedOn: '2024-12-15', exercises: [], updatedAt: now, createdAt: now, deletedAt: null },
-      { id: '2', performedOn: '2024-12-18', exercises: [], updatedAt: now, createdAt: now, deletedAt: null },
+      { id: '1', performedOn: '2024-12-15', exercises: [], updatedAt: now, createdAt: now },
+      { id: '2', performedOn: '2024-12-18', exercises: [], updatedAt: now, createdAt: now },
     ];
 
     const sorted = sortSessionsByDateDesc(sessions);

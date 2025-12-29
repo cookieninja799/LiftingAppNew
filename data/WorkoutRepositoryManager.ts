@@ -12,9 +12,9 @@ export class WorkoutRepositoryManager implements WorkoutRepository {
     this.cloud = new CloudWorkoutRepository();
   }
 
-  async listSessions(includeDeleted = false): Promise<WorkoutSession[]> {
+  async listSessions(): Promise<WorkoutSession[]> {
     // Phase 0-1: Always return local
-    return this.local.listSessions(includeDeleted);
+    return this.local.listSessions();
   }
 
   async getWorkoutSession(id: string): Promise<WorkoutSession | null> {
@@ -27,9 +27,9 @@ export class WorkoutRepositoryManager implements WorkoutRepository {
     await this.cloud.upsertSession(session);
   }
 
-  async softDeleteSession(id: string): Promise<void> {
-    await this.local.softDeleteSession(id);
-    await this.cloud.softDeleteSession(id);
+  async deleteSession(id: string): Promise<void> {
+    await this.local.deleteSession(id);
+    await this.cloud.deleteSession(id);
   }
 }
 

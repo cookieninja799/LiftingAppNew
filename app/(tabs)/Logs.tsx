@@ -117,7 +117,7 @@ export default function Logs() {
     const updatedExercises = session.exercises.filter(ex => ex.id !== exerciseId);
     
     if (updatedExercises.length === 0) {
-      await workoutRepository.softDeleteSession(sessionId);
+      await workoutRepository.deleteSession(sessionId);
     } else {
       await workoutRepository.upsertSession({
         ...session,
@@ -137,7 +137,7 @@ export default function Logs() {
   };
 
   const deleteSession = async (sessionId: string) => {
-    await workoutRepository.softDeleteSession(sessionId);
+    await workoutRepository.deleteSession(sessionId);
     const fetchedSessions = await workoutRepository.listSessions();
     setSessions(fetchedSessions);
   };
@@ -255,7 +255,6 @@ export default function Logs() {
         exercises: [newExercise],
         updatedAt: now,
         createdAt: now,
-        deletedAt: null,
       });
     }
 

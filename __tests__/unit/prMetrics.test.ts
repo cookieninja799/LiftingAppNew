@@ -132,7 +132,6 @@ describe('calculatePRMetrics', () => {
           ],
           updatedAt: now,
           createdAt: now,
-          deletedAt: null,
         },
       ];
 
@@ -173,7 +172,6 @@ describe('calculatePRMetrics', () => {
           ],
           updatedAt: now,
           createdAt: now,
-          deletedAt: null,
         },
         {
           id: 'session-2',
@@ -202,7 +200,6 @@ describe('calculatePRMetrics', () => {
           ],
           updatedAt: now,
           createdAt: now,
-          deletedAt: null,
         },
       ];
 

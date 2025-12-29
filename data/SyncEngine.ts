@@ -1,11 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { workoutRepository } from './WorkoutRepositoryManager';
+import { supabase } from '../lib/supabase';
 import { CloudWorkoutRepository } from './CloudWorkoutRepository';
 import { LocalWorkoutRepository } from './LocalWorkoutRepository';
 import { WorkoutSession } from '../utils/workoutSessions';
 
-const LAST_SYNC_KEY = 'last_sync_at';
-const HAS_MIGRATED_KEY = 'has_migrated_to_cloud';
+const LAST_SYNC_KEY_BASE = 'last_sync_at';
+const HAS_MIGRATED_KEY_BASE = 'has_migrated_to_cloud';
 
 export class SyncEngine {
   private local = new LocalWorkoutRepository();
@@ -15,7 +15,8 @@ export class SyncEngine {
    * Performs a one-time migration of local data to the cloud for a new user.
    */
   async migrateLocalToCloud(): Promise<void> {
-    const hasMigrated = await AsyncStorage.getItem(HAS_MIGRATED_KEY);
+    const hasMigratedKey = await this.getKeyForCurrentUser(HAS_MIGRATED_KEY_BASE);
+    const hasMigrated = await AsyncStorage.getItem(hasMigratedKey);
     if (hasMigrated === 'true') return;
 
     console.log('Starting initial migration to cloud...');
@@ -29,8 +30,9 @@ export class SyncEngine {
       }
     }
 
-    await AsyncStorage.setItem(HAS_MIGRATED_KEY, 'true');
-    await AsyncStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
+    await AsyncStorage.setItem(hasMigratedKey, 'true');
+    const lastSyncKey = await this.getKeyForCurrentUser(LAST_SYNC_KEY_BASE);
+    await AsyncStorage.setItem(lastSyncKey, new Date().toISOString());
     console.log('Initial migration completed.');
   }
 
@@ -38,7 +40,8 @@ export class SyncEngine {
    * Main sync logic: "Latest updatedAt wins"
    */
   async syncNow(): Promise<{ pulled: number; pushed: number }> {
-    const lastSyncStr = await AsyncStorage.getItem(LAST_SYNC_KEY);
+    const lastSyncKey = await this.getKeyForCurrentUser(LAST_SYNC_KEY_BASE);
+    const lastSyncStr = await AsyncStorage.getItem(lastSyncKey);
     const lastSyncAt = lastSyncStr ? new Date(lastSyncStr) : new Date(0);
     const now = new Date().toISOString();
 
@@ -67,12 +70,21 @@ export class SyncEngine {
       }
     }
 
-    await AsyncStorage.setItem(LAST_SYNC_KEY, now);
+    await AsyncStorage.setItem(lastSyncKey, now);
     return { pulled: pulledCount, pushed: pushedCount };
   }
 
   async getLastSyncTime(): Promise<string | null> {
-    return AsyncStorage.getItem(LAST_SYNC_KEY);
+    const lastSyncKey = await this.getKeyForCurrentUser(LAST_SYNC_KEY_BASE);
+    return AsyncStorage.getItem(lastSyncKey);
+  }
+
+  private async getKeyForCurrentUser(baseKey: string): Promise<string> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+    return `${baseKey}:${user.id}`;
   }
 }
 
