@@ -68,6 +68,7 @@ function RootLayoutNav() {
     <Stack>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="review-parsed-workout" options={{ presentation: 'modal', title: 'Review Workout' }} />
     </Stack>
   );
 }

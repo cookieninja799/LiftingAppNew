@@ -1,9 +1,7 @@
 //RecordWorkout.tsx
 import { useEffectiveColorScheme } from '@/components/theme';
 import { Colors } from '@/constants/Colors';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import axios from 'axios';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
@@ -24,13 +22,15 @@ import { Text } from '@/components/ui/text';
 import { getApiBaseUrl } from '@/utils/helpers';
 import { WorkoutSession, mergeExercisesIntoSessions, sortSessionsByDateDesc } from '@/utils/workoutSessions';
 import { workoutRepository } from '@/data/WorkoutRepositoryManager';
-import { parseAssistantResponse, ParsedExercise } from '@/utils/assistantParsing';
+import { parseWorkoutText } from '@/ai/AIParser';
+import { supabase } from '@/lib/supabase';
+import { useRouter } from 'expo-router';
 
 export default function RecordWorkout() {
   const colorScheme = useEffectiveColorScheme();
+  const router = useRouter();
   const [input, setInput] = useState('');
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
-  const [threadId, setThreadId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const getTodayDate = (): string => {
@@ -41,28 +41,6 @@ export default function RecordWorkout() {
     return `${year}-${month}-${day}`;
   };
 
-  const generateId = (): string =>
-    Date.now().toString() + Math.random().toString(36).substring(2, 8);
-
-  useEffect(() => {
-    const initializeThread = async () => {
-      setIsLoading(true);
-      const apiBaseUrl = getApiBaseUrl();
-      const apiUrl = `${apiBaseUrl}/thread`;
-      try {
-        const response = await axios.get(apiUrl, {
-          timeout: 10000, // 10 second timeout
-        });
-        setThreadId(response.data.threadId);
-      } catch (error: any) {
-        console.error('Failed to create thread:', error);
-        Alert.alert('Connection Error', `Unable to connect to server at ${apiBaseUrl}. Please check:\n1. Server is running\n2. Device and server are on the same network\n3. IP address is correct`);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    initializeThread();
-  }, []);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -78,26 +56,6 @@ export default function RecordWorkout() {
     }, [])
   );
 
-  const parseInputWithAssistant = async (userInput: string): Promise<ParsedExercise[] | null> => {
-    if (!threadId) {
-      Alert.alert('Error', 'Thread not initialized. Please wait a moment and try again.');
-      return null;
-    }
-    try {
-      const apiBaseUrl = getApiBaseUrl();
-      const response = await axios.post(`${apiBaseUrl}/message`, {
-        threadId,
-        message: userInput,
-      });
-
-      return parseAssistantResponse(response.data);
-    } catch (error) {
-      console.error('Error parsing input with assistant:', error);
-      Alert.alert('Error', 'Failed to parse input. Please try again.');
-      return null;
-    }
-  };
-
   const handleLogWorkout = async () => {
     if (!input.trim()) {
       Alert.alert('Error', 'Please enter a valid workout description.');
@@ -105,11 +63,34 @@ export default function RecordWorkout() {
     }
 
     setIsLoading(true);
-    const parsedExercises = await parseInputWithAssistant(input.trim());
-    setIsLoading(false);
+    try {
+      const parseResult = await parseWorkoutText(input.trim(), {
+        supabaseClient: supabase,
+        storeRawText: false,
+      });
 
-    if (parsedExercises && parsedExercises.length > 0) {
-      const updatedSessions = mergeExercisesIntoSessions(sessions, parsedExercises);
+      if (!parseResult.exercises || parseResult.exercises.length === 0) {
+        Alert.alert('Parse Error', parseResult.warnings.join('\n') || 'Failed to parse workout.');
+        setIsLoading(false);
+        return;
+      }
+
+      // Route to review screen if confidence is low or there are warnings
+      if (parseResult.confidence === 'low' || parseResult.warnings.length > 0) {
+        // Navigate to review screen with parse result
+        router.push({
+          pathname: '/review-parsed-workout',
+          params: {
+            parseResultJson: JSON.stringify(parseResult),
+            inputText: input.trim(),
+          },
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // High confidence - merge and save directly
+      const updatedSessions = mergeExercisesIntoSessions(sessions, parseResult.exercises);
       
       // Save all updated/new sessions
       for (const session of updatedSessions) {
@@ -118,8 +99,12 @@ export default function RecordWorkout() {
 
       setSessions(updatedSessions);
       setInput('');
-    } else {
-      Alert.alert('Error', 'Failed to log workout.');
+      Alert.alert('Success', `Logged ${parseResult.exercises.length} exercise(s) successfully!`);
+    } catch (error) {
+      console.error('Error parsing workout:', error);
+      Alert.alert('Error', `Failed to parse workout: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 

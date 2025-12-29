@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Keyboard,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -48,7 +49,16 @@ export const AuthScreen = () => {
   };
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+    <TouchableWithoutFeedback onPress={(e) => {
+      // On web, don't dismiss keyboard if clicking on an input element or button
+      if (Platform.OS === 'web') {
+        const targetTag = e?.nativeEvent?.target?.tagName;
+        if (targetTag === 'INPUT' || targetTag === 'TEXTAREA' || targetTag === 'BUTTON') {
+          return; // Don't dismiss keyboard when clicking on inputs or buttons
+        }
+      }
+      Keyboard.dismiss();
+    }}>
       <View style={styles.container}>
         <Text style={styles.title}>{isSignUp ? 'Create Account' : 'Welcome Back'}</Text>
 

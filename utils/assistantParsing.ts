@@ -12,8 +12,8 @@ export type ParsedExercise = {
   date: string;
   exercise: string;
   sets: number;
-  reps: number[];
-  weights: string[];
+  reps: number[] | null;
+  weights: string[] | null;
   primaryMuscleGroup?: string;
   muscleContributions?: MuscleContribution[];
 };

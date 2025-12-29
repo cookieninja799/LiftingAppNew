@@ -31,6 +31,19 @@ import { workoutRepository } from '@/data/WorkoutRepositoryManager';
 import { useAuth } from '@/providers/AuthProvider';
 import { syncEngine } from '@/data/SyncEngine';
 import { loadUserProfile } from '../../utils/helpers';
+import {
+  getSettings,
+  saveSettings,
+  getApiKey,
+  saveApiKey,
+  clearApiKey,
+  AISettings,
+  AIProvider,
+  ExecutionMode,
+} from '@/data/AISettingsRepository';
+import { createProvider } from '@/ai/providers';
+import { parseWorkoutText } from '@/ai/AIParser';
+import { supabase } from '@/lib/supabase';
 
 const themeOptions = [
   { label: 'System', value: 'system' },
@@ -50,6 +63,22 @@ const Profile: React.FC = () => {
   const [height, setHeight] = useState('');
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  
+  // AI Settings state
+  const [aiSettings, setAiSettings] = useState<AISettings>({
+    provider: 'openai',
+    model: 'gpt-4o-mini',
+    executionMode: 'byok',
+    useTemplateMuscles: true,
+    allowModelProvidedMuscles: false,
+  });
+  const [apiKey, setApiKey] = useState('');
+  const [apiKeyVisible, setApiKeyVisible] = useState(false);
+  const [isTestingKey, setIsTestingKey] = useState(false);
+  const [testKeyResult, setTestKeyResult] = useState<{ success: boolean; message?: string } | null>(null);
+  const [parsePreviewText, setParsePreviewText] = useState('');
+  const [isParsingPreview, setIsParsingPreview] = useState(false);
+  const [parsePreviewResult, setParsePreviewResult] = useState<any>(null);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -63,6 +92,14 @@ const Profile: React.FC = () => {
       }
       const syncTime = await syncEngine.getLastSyncTime();
       setLastSync(syncTime);
+      
+      // Load AI settings
+      const settings = await getSettings();
+      setAiSettings(settings);
+      const key = await getApiKey(settings.provider, settings.model);
+      if (key) {
+        setApiKey(key);
+      }
     };
     fetchProfile();
   }, []);
@@ -142,18 +179,12 @@ const Profile: React.FC = () => {
 
     // Web: Use window.confirm (Alert.alert callbacks don't work on web)
     if (Platform.OS === 'web') {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/273bebc2-49d2-4e67-aa1c-1b6f54b489ea',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Profile.tsx:119',message:'Web platform: using window.confirm',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       const confirmed = window.confirm('This will replace all existing workouts. Continue?');
       if (confirmed) {
         await performImport();
       }
     } else {
       // Native: Use Alert.alert with callbacks
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/273bebc2-49d2-4e67-aa1c-1b6f54b489ea',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Profile.tsx:124',message:'Native platform: using Alert.alert',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       Alert.alert(
         'Import Workout Data',
         'This will replace all existing workouts. Continue?',
@@ -193,6 +224,88 @@ const Profile: React.FC = () => {
         },
       ]
     );
+  };
+
+  // AI Settings handlers
+  const handleSaveAISettings = async () => {
+    try {
+      await saveSettings(aiSettings);
+      if (apiKey.trim()) {
+        await saveApiKey(aiSettings.provider, aiSettings.model, apiKey.trim());
+      }
+      Alert.alert('Success', 'AI settings saved successfully!');
+    } catch (error) {
+      console.error('Failed to save AI settings:', error);
+      Alert.alert('Error', 'Failed to save AI settings.');
+    }
+  };
+
+  const handleTestKey = async () => {
+    if (!apiKey.trim()) {
+      Alert.alert('Error', 'Please enter an API key first.');
+      return;
+    }
+
+    setIsTestingKey(true);
+    setTestKeyResult(null);
+
+    try {
+      if (aiSettings.executionMode === 'hosted') {
+        // Test hosted mode by calling health endpoint
+        const { error } = await supabase.functions.invoke('parse-workout-text', {
+          body: { provider: aiSettings.provider, model: aiSettings.model, text: 'test' },
+        });
+        if (error) {
+          setTestKeyResult({ success: false, message: error.message });
+        } else {
+          setTestKeyResult({ success: true, message: 'Hosted mode connection successful' });
+        }
+      } else {
+        // Test BYOK mode
+        const provider = createProvider(aiSettings.provider, aiSettings.model);
+        const result = await provider.testKey(apiKey.trim());
+        setTestKeyResult(result);
+      }
+    } catch (error) {
+      setTestKeyResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    } finally {
+      setIsTestingKey(false);
+    }
+  };
+
+  const handleParsePreview = async () => {
+    if (!parsePreviewText.trim()) {
+      Alert.alert('Error', 'Please enter workout text to parse.');
+      return;
+    }
+
+    setIsParsingPreview(true);
+    setParsePreviewResult(null);
+
+    try {
+      const result = await parseWorkoutText(parsePreviewText.trim(), {
+        supabaseClient: supabase,
+        storeRawText: true,
+      });
+      setParsePreviewResult(result);
+    } catch (error) {
+      setParsePreviewResult({
+        exercises: [],
+        warnings: [`Parse error: ${error instanceof Error ? error.message : 'Unknown error'}`],
+        confidence: 'low',
+      });
+    } finally {
+      setIsParsingPreview(false);
+    }
+  };
+
+  const providerModels: Record<AIProvider, string[]> = {
+    openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+    anthropic: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229'],
+    gemini: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro'],
   };
 
   // Get colors for icons based on current theme
@@ -267,17 +380,6 @@ const Profile: React.FC = () => {
                 options={themeOptions}
                 value={deferredPreference}
               onChange={(value) => {
-                // #region agent log
-                  debugLog({
-                    location: "app/(tabs)/Profile.tsx:214",
-                    message: "Theme preference change requested",
-                    data: { selected: value },
-                    sessionId: "debug-session",
-                    runId: "post-fix",
-                    hypothesisId: "H3",
-                  });
-                // #endregion
-                  console.log(`[H3] Theme preference change requested selected=${value}`);
                 // Use startTransition to mark theme change as non-urgent
                 // This prevents interrupting navigation context during renders
                 startTransition(() => {
@@ -336,6 +438,209 @@ const Profile: React.FC = () => {
               </View>
               
               <Button label="Save Profile" onPress={handleSave} className="mt-2" />
+            </CardContent>
+          </Card>
+
+          {/* AI Settings Card */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>AI Settings</CardTitle>
+              <CardDescription>Configure AI provider and parsing options</CardDescription>
+            </CardHeader>
+            <CardContent className="gap-4">
+              <View>
+                <Text variant="small" className="mb-1.5 ml-1">Provider</Text>
+                <SegmentedControl
+                  options={[
+                    { label: 'OpenAI', value: 'openai' },
+                    { label: 'Anthropic', value: 'anthropic' },
+                    { label: 'Gemini', value: 'gemini' },
+                  ]}
+                  value={aiSettings.provider}
+                  onChange={(value) => {
+                    setAiSettings({ ...aiSettings, provider: value as AIProvider });
+                    setApiKey('');
+                    setTestKeyResult(null);
+                  }}
+                />
+              </View>
+
+              <View>
+                <Text variant="small" className="mb-1.5 ml-1">Model</Text>
+                <View className="flex-row gap-2">
+                  <View className="flex-1">
+                    <Input
+                      placeholder="Model name"
+                      value={aiSettings.model}
+                      onChangeText={(text) => setAiSettings({ ...aiSettings, model: text })}
+                    />
+                  </View>
+                </View>
+                <Text variant="small" className="text-muted-foreground mt-1 ml-1">
+                  Suggested: {providerModels[aiSettings.provider].join(', ')}
+                </Text>
+              </View>
+
+              <View>
+                <Text variant="small" className="mb-1.5 ml-1">API Key</Text>
+                <View className="flex-row gap-2">
+                  <View className="flex-1">
+                    <Input
+                      placeholder="Enter API key"
+                      secureTextEntry={!apiKeyVisible}
+                      value={apiKey}
+                      onChangeText={setApiKey}
+                    />
+                  </View>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    label={apiKeyVisible ? 'Hide' : 'Show'}
+                    onPress={() => setApiKeyVisible(!apiKeyVisible)}
+                  />
+                </View>
+              </View>
+
+              <View>
+                <Text variant="small" className="mb-1.5 ml-1">Execution Mode</Text>
+                <SegmentedControl
+                  options={[
+                    { label: 'BYOK', value: 'byok' },
+                    { label: 'Hosted', value: 'hosted' },
+                  ]}
+                  value={aiSettings.executionMode}
+                  onChange={(value) => {
+                    setAiSettings({ ...aiSettings, executionMode: value as ExecutionMode });
+                    setTestKeyResult(null);
+                  }}
+                />
+                <Text variant="small" className="text-muted-foreground mt-1 ml-1">
+                  {aiSettings.executionMode === 'byok'
+                    ? 'Device calls provider directly using your API key'
+                    : 'Device calls Supabase Edge Function (server uses server key)'}
+                </Text>
+              </View>
+
+              <View className="flex-row gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  label={isTestingKey ? 'Testing...' : 'Test Key'}
+                  onPress={handleTestKey}
+                  disabled={isTestingKey || !apiKey.trim()}
+                  className="flex-1"
+                />
+                <Button
+                  variant="default"
+                  size="sm"
+                  label="Save Settings"
+                  onPress={handleSaveAISettings}
+                  className="flex-1"
+                />
+              </View>
+
+              {testKeyResult && (
+                <View className={`p-3 rounded-md ${testKeyResult.success ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
+                  <Text className={testKeyResult.success ? 'text-green-600' : 'text-red-600'}>
+                    {testKeyResult.success ? '✓ ' : '✗ '}
+                    {testKeyResult.message || (testKeyResult.success ? 'Key is valid' : 'Key test failed')}
+                  </Text>
+                </View>
+              )}
+
+              <Separator />
+
+              <View>
+                <Text variant="small" className="mb-1.5 ml-1">Use Template Muscles (Recommended)</Text>
+                <SegmentedControl
+                  options={[
+                    { label: 'ON', value: 'true' },
+                    { label: 'OFF', value: 'false' },
+                  ]}
+                  value={String(aiSettings.useTemplateMuscles)}
+                  onChange={(value) => {
+                    setAiSettings({ ...aiSettings, useTemplateMuscles: value === 'true' });
+                  }}
+                />
+              </View>
+
+              <View>
+                <Text variant="small" className="mb-1.5 ml-1">Allow Model-Provided Muscles (Advanced)</Text>
+                <SegmentedControl
+                  options={[
+                    { label: 'OFF', value: 'false' },
+                    { label: 'ON', value: 'true' },
+                  ]}
+                  value={String(aiSettings.allowModelProvidedMuscles)}
+                  onChange={(value) => {
+                    setAiSettings({ ...aiSettings, allowModelProvidedMuscles: value === 'true' });
+                  }}
+                />
+              </View>
+
+              <Separator />
+
+              <View>
+                <Text variant="small" className="mb-1.5 ml-1">Parse Preview</Text>
+                <Input
+                  multiline
+                  numberOfLines={4}
+                  placeholder="Enter workout text to test parsing..."
+                  value={parsePreviewText}
+                  onChangeText={setParsePreviewText}
+                  className="min-h-[100px]"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  label={isParsingPreview ? 'Parsing...' : 'Run Parse'}
+                  onPress={handleParsePreview}
+                  disabled={isParsingPreview || !parsePreviewText.trim()}
+                  className="mt-2"
+                />
+              </View>
+
+              {parsePreviewResult && (
+                <View className="gap-2">
+                  <Text variant="small" className="font-bold">
+                    Confidence: <Text className={parsePreviewResult.confidence === 'high' ? 'text-green-600' : 'text-yellow-600'}>{parsePreviewResult.confidence.toUpperCase()}</Text>
+                  </Text>
+                  {parsePreviewResult.warnings.length > 0 && (
+                    <View>
+                      <Text variant="small" className="font-bold mb-1">Warnings:</Text>
+                      {parsePreviewResult.warnings.map((w: string, i: number) => (
+                        <Text key={i} variant="small" className="text-yellow-600">• {w}</Text>
+                      ))}
+                    </View>
+                  )}
+                  {parsePreviewResult.exercises && parsePreviewResult.exercises.length > 0 && (
+                    <View>
+                      <Text variant="small" className="font-bold mb-1">
+                        Parsed Exercises ({parsePreviewResult.exercises.length}):
+                      </Text>
+                      {parsePreviewResult.exercises.map((ex: any, i: number) => (
+                        <Text key={i} variant="small" className="text-muted-foreground">
+                          • {ex.exercise}: {ex.sets} sets, {ex.reps?.join(', ') || 'N/A'} reps
+                        </Text>
+                      ))}
+                    </View>
+                  )}
+                  {parsePreviewResult.extractedJsonText && (
+                    <View>
+                      <Text variant="small" className="font-bold mb-1">Extracted JSON:</Text>
+                      <Text variant="small" className="text-muted-foreground font-mono text-xs">
+                        {parsePreviewResult.extractedJsonText.substring(0, 200)}
+                        {parsePreviewResult.extractedJsonText.length > 200 ? '...' : ''}
+                      </Text>
+                    </View>
+                  )}
+                  {parsePreviewResult.aiTraceId && (
+                    <Text variant="small" className="text-muted-foreground">
+                      Trace ID: {parsePreviewResult.aiTraceId}
+                    </Text>
+                  )}
+                </View>
+              )}
             </CardContent>
           </Card>
 

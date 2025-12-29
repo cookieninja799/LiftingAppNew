@@ -16,27 +16,6 @@ export default function TabsLayout() {
   // Add extra padding for iOS home indicator
   const bottomPadding = Platform.OS === 'ios' ? Math.max(insets.bottom, 10) : 10;
 
-  // #region agent log
-  debugLog({
-    location: 'app/(tabs)/_layout.tsx:12',
-    message: 'TabsLayout render',
-    data: {
-      colorScheme,
-      hasNavigationContext: !!navigationContext,
-      tabRoutes: navigationContext?.route?.state?.routeNames ?? [],
-    },
-    sessionId: 'debug-session',
-    runId: 'post-fix',
-    hypothesisId: 'H4',
-  });
-  // #endregion
-
-  console.log(
-    `[H4] TabsLayout render colorScheme=${colorScheme} hasNav=${!!navigationContext} tabRoutes=${JSON.stringify(
-      navigationContext?.route?.state?.routeNames ?? []
-    )}`
-  );
-
   return (
     <Tabs
       screenOptions={({ route }) => ({
