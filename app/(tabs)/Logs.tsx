@@ -312,7 +312,7 @@ export default function Logs() {
                     >
                       <View>
                         <Text className="font-bold text-lg">
-                          {new Date(session.performedOn).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
+                          {new Date(session.performedOn + 'T12:00:00Z').toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' })}
                         </Text>
                         <Text variant="muted">
                           {session.exercises.length} {session.exercises.length === 1 ? 'exercise' : 'exercises'}

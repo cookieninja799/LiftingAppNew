@@ -23,6 +23,14 @@ const Analytics: React.FC = () => {
     await loadUserProfile();
     try {
       const sessions = await workoutRepository.listSessions();
+      console.log('[Analytics] Sessions loaded:', sessions?.length);
+      if (sessions && sessions.length > 0) {
+        console.log('[Analytics] Session dates:', sessions.map(s => s.performedOn));
+        sessions.forEach(s => {
+          console.log(`[Analytics] Session ${s.id}: date=${s.performedOn}, exercises=${s.exercises.length}`);
+        });
+      }
+      
       if (!sessions || sessions.length === 0) {
         setWorkoutStats(getEmptyStats());
         setMarkedDates({});
@@ -35,6 +43,8 @@ const Analytics: React.FC = () => {
         sessions,
         { currentWeek }
       );
+      
+      console.log('[Analytics] Calculated markedDates:', dates);
   
       setWorkoutStats(stats);
       setMarkedDates(dates);

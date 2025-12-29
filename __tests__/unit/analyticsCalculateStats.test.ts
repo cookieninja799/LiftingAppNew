@@ -263,6 +263,52 @@ describe('calculateStatsFromSessions', () => {
       expect(workoutStats.muscleGroupStats['Hamstrings'].weeklySets.touched['2024-W51']).toBe(4);
     });
 
+    it('should treat primaryMuscleGroup as direct even if assistant-provided fractions are imperfect', () => {
+      const now = new Date().toISOString();
+      const sessions = [
+        {
+          id: 'session-1',
+          performedOn: '2024-12-18',
+          exercises: [
+            {
+              id: 'ex-1',
+              sessionId: 'session-1',
+              nameRaw: 'Squats',
+              // Assistant says Quads is primary but provides a non-1.0 fraction (seen in the wild).
+              primaryMuscleGroup: 'Quads',
+              muscleContributions: [
+                { muscleGroup: 'Quads', fraction: 0.5 },
+                { muscleGroup: 'Hamstrings', fraction: 0.25 },
+              ],
+              sets: [
+                { id: 's1', exerciseId: 'ex-1', setIndex: 0, reps: 8, weightText: '135', updatedAt: now, createdAt: now },
+                { id: 's2', exerciseId: 'ex-1', setIndex: 1, reps: 8, weightText: '135', updatedAt: now, createdAt: now },
+                { id: 's3', exerciseId: 'ex-1', setIndex: 2, reps: 8, weightText: '135', updatedAt: now, createdAt: now },
+              ],
+              updatedAt: now,
+              createdAt: now,
+            },
+          ],
+          updatedAt: now,
+          createdAt: now,
+        },
+      ];
+
+      const { workoutStats } = calculateStatsFromSessions(sessions as any, {
+        currentWeek: '2024-W51',
+      });
+
+      // Quads should be counted as direct sets because it's the primary muscle group.
+      expect(workoutStats.muscleGroupStats['Quads'].weeklySets.direct['2024-W51']).toBe(3);
+      expect(workoutStats.muscleGroupStats['Quads'].weeklySets.fractional['2024-W51']).toBe(3);
+      expect(workoutStats.muscleGroupStats['Quads'].weeklySets.touched['2024-W51']).toBe(3);
+
+      // Hamstrings stays secondary.
+      expect(workoutStats.muscleGroupStats['Hamstrings'].weeklySets.direct['2024-W51']).toBe(0);
+      expect(workoutStats.muscleGroupStats['Hamstrings'].weeklySets.fractional['2024-W51']).toBe(0.75);
+      expect(workoutStats.muscleGroupStats['Hamstrings'].weeklySets.touched['2024-W51']).toBe(3);
+    });
+
     it('should calculate direct-only volume (literature standard)', () => {
       const { workoutStats } = calculateStatsFromSessions(fractionalSetsSessions, {
         currentWeek: '2024-W51',

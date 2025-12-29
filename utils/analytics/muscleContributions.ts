@@ -3,6 +3,74 @@
 
 import { WorkoutExercise, MuscleContribution } from '../workoutSessions';
 
+const ALLOWED_MUSCLE_GROUPS = new Set([
+  'Chest',
+  'Back',
+  'Shoulders',
+  'Arms',
+  'Quads',
+  'Hamstrings',
+]);
+
+function clampFraction(n: unknown): number | null {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+  if (n <= 0) return null;
+  if (n >= 1) return 1;
+  return n;
+}
+
+/**
+ * Sanitizes / normalizes provided muscle contributions:
+ * - Filters to allowed muscle groups only
+ * - Clamps fractions to (0, 1]
+ * - Dedupes by muscleGroup (keeps max fraction; merges isDirect)
+ * - If primaryMuscleGroup is present, ensures it exists with fraction=1 and isDirect=true
+ */
+function normalizeProvidedContributions(
+  provided: MuscleContribution[] | undefined,
+  primaryMuscleGroup?: string
+): MuscleContribution[] | undefined {
+  if (!provided || provided.length === 0) return undefined;
+
+  const byGroup = new Map<string, MuscleContribution>();
+
+  for (const c of provided) {
+    const muscleGroup = c?.muscleGroup;
+    if (typeof muscleGroup !== 'string' || !ALLOWED_MUSCLE_GROUPS.has(muscleGroup)) continue;
+
+    const fraction = clampFraction((c as any).fraction);
+    if (fraction === null) continue;
+
+    const prev = byGroup.get(muscleGroup);
+    if (!prev) {
+      byGroup.set(muscleGroup, {
+        muscleGroup,
+        fraction,
+        isDirect: c?.isDirect === true ? true : undefined,
+      });
+      continue;
+    }
+
+    byGroup.set(muscleGroup, {
+      muscleGroup,
+      fraction: Math.max(prev.fraction, fraction),
+      isDirect: prev.isDirect === true || c?.isDirect === true ? true : undefined,
+    });
+  }
+
+  // Ensure primary muscle group is always treated as direct with fraction=1.0
+  if (primaryMuscleGroup && ALLOWED_MUSCLE_GROUPS.has(primaryMuscleGroup)) {
+    byGroup.set(primaryMuscleGroup, {
+      muscleGroup: primaryMuscleGroup,
+      fraction: 1,
+      isDirect: true,
+    });
+  }
+
+  const normalized = Array.from(byGroup.values());
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 /**
  * Template dictionary for common exercises.
  * Maps normalized exercise names to their muscle contributions.
@@ -270,11 +338,16 @@ export function getDefaultMuscleContributions(
 export function ensureMuscleContributions(
   ex: WorkoutExercise
 ): MuscleContribution[] | undefined {
-  // If exercise already has valid muscleContributions, use them
-  if (ex.muscleContributions && ex.muscleContributions.length > 0) {
-    return ex.muscleContributions;
+  // Prefer explicit muscleContributions when present, but sanitize and
+  // enforce "primary muscle group is direct (fraction=1.0)" for consistency.
+  const normalizedProvided = normalizeProvidedContributions(
+    ex.muscleContributions,
+    ex.primaryMuscleGroup
+  );
+  if (normalizedProvided && normalizedProvided.length > 0) {
+    return normalizedProvided;
   }
-  
+
   // Otherwise, derive from templates or primary muscle group
   return getDefaultMuscleContributions(ex.nameRaw, ex.primaryMuscleGroup);
 }

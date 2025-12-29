@@ -159,22 +159,14 @@ export const getColorForTotalSets = (
 ): string => {
   // Avoid divide-by-zero and show "no activity" color
   if (maxTotalSets <= 0 || totalSets <= 0) {
-    return scheme === 'dark' ? '#111827' : '#e2e8f0';
+    return '#eee';
   }
 
-  const ratio = Math.min(totalSets / maxTotalSets, 1);
-
-  // Light palette leans on indigo; dark palette uses deeper shades for contrast
-  const palette =
-    scheme === 'dark'
-      ? ['#1f2937', '#312e81', '#4338ca', '#4f46e5', '#6366f1']
-      : ['#e2e8f0', '#c7d2fe', '#a5b4fc', '#818cf8', '#4f46e5'];
-
-  if (ratio >= 0.9) return palette[4];
-  if (ratio >= 0.7) return palette[3];
-  if (ratio >= 0.5) return palette[2];
-  if (ratio >= 0.25) return palette[1];
-  return palette[0];
+  // Use fixed thresholds based on absolute set counts (matching WorkoutLegend)
+  if (totalSets >= 20) return '#FF5722'; // Heavy: 20+
+  if (totalSets >= 15) return '#FF8A65'; // Medium: 15-19
+  if (totalSets >= 10) return '#FFCCBC'; // Light: 10-14
+  return '#FFCCBC'; // Very Light: 1-9 (changed from #eee to make it more visible)
 };
 
 /**

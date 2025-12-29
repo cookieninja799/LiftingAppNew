@@ -19,6 +19,7 @@ export class CloudWorkoutRepository implements WorkoutRepository {
       .from('workout_sessions')
       .select(`
         *,
+        performed_on_utc_day,
         workout_exercises (
           *,
           workout_sets (*)
@@ -40,6 +41,7 @@ export class CloudWorkoutRepository implements WorkoutRepository {
       .from('workout_sessions')
       .select(`
         *,
+        performed_on_utc_day,
         workout_exercises (
           *,
           workout_sets (*)
@@ -282,10 +284,13 @@ export class CloudWorkoutRepository implements WorkoutRepository {
   }
 
   private mapToDomain(dbSession: any): WorkoutSession {
+    console.log('[CloudRepo] mapToDomain - performed_on:', dbSession.performed_on);
+    console.log('[CloudRepo] mapToDomain - performed_on_utc_day:', dbSession.performed_on_utc_day);
+    
     return {
       id: dbSession.id,
       userId: dbSession.user_id,
-      performedOn: dbSession.performed_on,
+      performedOn: dbSession.performed_on_utc_day || dbSession.performed_on, // Use UTC day for consistency
       title: dbSession.title,
       notes: dbSession.notes,
       source: dbSession.source,
