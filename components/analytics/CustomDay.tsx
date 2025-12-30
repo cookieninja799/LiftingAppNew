@@ -2,6 +2,8 @@
 import React from 'react';
 import { TouchableOpacity, Text, View, StyleSheet } from 'react-native';
 import { DateData } from 'react-native-calendars';
+import { useEffectiveColorScheme } from '@/components/theme';
+import { Colors } from '@/constants/Colors';
 
 interface CustomDayProps {
   date?: DateData;
@@ -12,6 +14,9 @@ interface CustomDayProps {
 }
 
 const CustomDay: React.FC<CustomDayProps> = ({ date, state, marking, onPress, onLongPress }) => {
+  const colorScheme = useEffectiveColorScheme();
+  const colors = Colors[colorScheme];
+  
   if (!date) return null;
 
   const isToday = state === 'today';
@@ -22,14 +27,14 @@ const CustomDay: React.FC<CustomDayProps> = ({ date, state, marking, onPress, on
   const backgroundColor = marking?.customStyles?.container?.backgroundColor || 'transparent';
   const hasMarking = backgroundColor !== 'transparent';
   
-  // Text color
+  // Text color - use theme-aware colors
   const textColor = hasMarking 
     ? '#ffffff' 
     : isDisabled 
-    ? '#d1d5db' 
+    ? colors.mutedForeground + '80'
     : isToday 
-    ? '#6366f1' 
-    : '#000000';
+    ? colors.primary 
+    : colors.text;
 
   const handlePress = () => {
     if (onPress && !isDisabled) {
@@ -52,7 +57,7 @@ const CustomDay: React.FC<CustomDayProps> = ({ date, state, marking, onPress, on
         styles.container,
         { backgroundColor },
         hasMarking && styles.marked,
-        isToday && !hasMarking && styles.today,
+        isToday && !hasMarking && { borderWidth: 1, borderColor: colors.primary },
       ]}
     >
       <Text
@@ -82,7 +87,7 @@ const styles = StyleSheet.create({
   },
   today: {
     borderWidth: 1,
-    borderColor: '#6366f1',
+    borderColor: '#7c3aed', // primary color - actual border color set inline for theme support
   },
   text: {
     fontSize: 16,

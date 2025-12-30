@@ -67,6 +67,7 @@ const CalendarHeatMap: React.FC<CalendarHeatMapProps> = ({ markedDates }) => {
 
     return (
       <Calendar
+        key={colorScheme} // Force re-render when theme changes
         markingType="custom"
         markedDates={formattedMarkedDates}
         current={initialDate}
