@@ -65,13 +65,24 @@ async function callHostedMode(
   supabaseClient: any
 ): Promise<{ rawText: string }> {
   try {
-    const { data, error } = await supabaseClient.functions.invoke('parse-workout-text', {
+    const {
+      data: { session },
+    } = await supabaseClient.auth.getSession();
+    const accessToken = session?.access_token?.trim();
+    if (!accessToken) {
+      throw new ProviderError('auth_error', 'No active Supabase session (hosted mode requires login)');
+    }
+
+    const invokeOptions: any = {
       body: {
         provider: settings.provider,
         model: settings.model,
         text,
       },
-    });
+    };
+    invokeOptions.headers = { Authorization: `Bearer ${accessToken}` };
+
+    const { data, error } = await supabaseClient.functions.invoke('parse-workout-text', invokeOptions);
 
     if (error) {
       throw new ProviderError('provider_error', `Hosted mode error: ${error.message}`);

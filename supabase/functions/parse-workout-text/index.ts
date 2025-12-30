@@ -1,8 +1,5 @@
 // @ts-nocheck
-// supabase/functions/parse-workout-text/index.ts
 // Supabase Edge Function for hosted AI parsing
-// Note: TypeScript linter may show false positives for try-catch in Deno.serve context
-// This is valid Deno code and will work correctly in the Supabase Edge Runtime
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -13,85 +10,139 @@ const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') || '';
 const RATE_LIMIT_WINDOW_SECONDS = 60;
 const RATE_LIMIT_MAX_REQUESTS = 10;
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
 interface RequestBody {
   provider: 'openai' | 'anthropic' | 'gemini';
   model: string;
   text: string;
-  task?: 'parse_workout' | 'ask_intent' | 'plan_intent' | 'ask_explain' | 'plan_explain' | 'conversational_response';
+  task?:
+    | 'parse_workout'
+    | 'ask_intent'
+    | 'plan_intent'
+    | 'ask_explain'
+    | 'plan_explain'
+    | 'conversational_response';
   systemPrompt?: string;
 }
 
+function jsonResponse(body: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json',
+      ...extraHeaders,
+    },
+  });
+}
+
 Deno.serve(async (req) => {
-  // Handle CORS
+  // CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-      },
-    });
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
     // Get authorization header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      console.warn('Missing Authorization header');
+      return jsonResponse(
+        {
+          error: 'Missing authorization header',
+          diag: { hasAuthorizationHeader: false },
+        },
+        401
       );
     }
+
+    // Normalize JWT (allow either "Bearer <jwt>" or "<jwt>")
+    const jwt = (authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7) : authHeader).trim();
 
     // Create Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Missing Supabase env', {
+        hasSupabaseUrl: Boolean(supabaseUrl),
+        hasSupabaseAnonKey: Boolean(supabaseAnonKey),
+      });
+      return jsonResponse({ error: 'Supabase env not configured in Edge Function' }, 500);
+    }
+    // Use a non-authenticated client for user lookup (pass raw JWT explicitly)
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
     // Verify JWT and get user
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser();
+    } = await supabase.auth.getUser(jwt);
 
     if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Check rate limit
-    const { data: rateLimitData, error: rateLimitError } = await supabase.rpc(
-      'rate_limit_ai_request',
-      {
-        window_seconds: RATE_LIMIT_WINDOW_SECONDS,
-        max_requests: RATE_LIMIT_MAX_REQUESTS,
-      }
-    );
-
-    if (rateLimitError) {
-      console.error('Rate limit check error:', rateLimitError);
-      return new Response(
-        JSON.stringify({ error: 'Rate limit check failed' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!rateLimitData || rateLimitData.length === 0 || !rateLimitData[0].allowed) {
-      const resetAt = rateLimitData?.[0]?.reset_at;
-      return new Response(
-        JSON.stringify({
-          error: 'Rate limit exceeded',
-          reset_at: resetAt,
-        }),
+      console.warn('Unauthorized: supabase.auth.getUser() failed', {
+        authError: authError ? { message: authError.message, name: (authError as any).name } : null,
+        hasUser: Boolean(user),
+      });
+      return jsonResponse(
         {
-          status: 429,
-          headers: { 'Content-Type': 'application/json' },
+          error: 'Unauthorized',
+          details: authError?.message ?? null,
+          diag: {
+            hasAuthorizationHeader: true,
+            authorizationStartsWithBearer: authHeader.toLowerCase().startsWith('bearer '),
+            authorizationLength: authHeader.length,
+          },
+        },
+        401
+      );
+    }
+
+    // Authenticated client for DB calls (RLS, RPC)
+    const authedSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
+    });
+
+    // Check rate limit (optional: if RPC isn't installed yet, skip gracefully)
+    let remaining: number | null = null;
+    try {
+      const { data: rateLimitData, error: rateLimitError } = await authedSupabase.rpc(
+        'rate_limit_ai_request',
+        {
+          window_seconds: RATE_LIMIT_WINDOW_SECONDS,
+          max_requests: RATE_LIMIT_MAX_REQUESTS,
         }
       );
+
+      if (rateLimitError) {
+        const code = (rateLimitError as any)?.code;
+        // PGRST202 = RPC not found in schema cache
+        if (code === 'PGRST202') {
+          console.warn('Rate limit RPC not found; skipping rate limiting');
+        } else {
+          console.error('Rate limit check error:', rateLimitError);
+          return jsonResponse({ error: 'Rate limit check failed', details: rateLimitError.message }, 500);
+        }
+      } else if (rateLimitData?.length && rateLimitData[0]?.allowed === false) {
+        const resetAt = rateLimitData?.[0]?.reset_at;
+        return jsonResponse(
+          {
+            error: 'Rate limit exceeded',
+            reset_at: resetAt,
+          },
+          429
+        );
+      } else if (rateLimitData?.length) {
+        const r = rateLimitData?.[0]?.remaining;
+        remaining = typeof r === 'number' ? r : null;
+      }
+    } catch (e) {
+      console.error('Rate limit check unexpected error:', e);
+      return jsonResponse({ error: 'Rate limit check failed' }, 500);
     }
 
     // Parse request body
@@ -99,10 +150,7 @@ Deno.serve(async (req) => {
     const { provider, model, text, task = 'parse_workout', systemPrompt: customSystemPrompt } = body;
 
     if (!provider || !model || !text) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required fields: provider, model, text' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ error: 'Missing required fields: provider, model, text' }, 400);
     }
 
     // Select system prompt based on task
@@ -160,8 +208,9 @@ Rules:
 - All fields are optional
 - Return ONLY the JSON object, no other text`;
     } else if (task === 'ask_explain' || task === 'plan_explain') {
-      systemPrompt = task === 'ask_explain'
-        ? `You are a helpful assistant that explains workout data in a friendly, conversational way.
+      systemPrompt =
+        task === 'ask_explain'
+          ? `You are a helpful assistant that explains workout data in a friendly, conversational way.
 
 Given a structured data result, format it into a natural language answer.
 
@@ -171,7 +220,7 @@ Rules:
 - If no data is found, explain that politely
 - Keep it under 3 sentences unless the data is complex
 - Return ONLY the explanation text, no markdown formatting`
-        : `You are a helpful assistant that explains workout plans in a friendly, motivational way.
+          : `You are a helpful assistant that explains workout plans in a friendly, motivational way.
 
 Given a structured workout plan, format it into a natural language explanation.
 
@@ -306,34 +355,26 @@ SHORTHAND PARSING
 FINAL NOTE
 ────────────────────────────────────────────────────────
 Return ONLY the JSON array. No other output.`;
+    }
 
     let rawText = '';
 
     if (provider === 'openai') {
       if (!OPENAI_API_KEY) {
-        return new Response(
-          JSON.stringify({ error: 'OpenAI API key not configured' }),
-          { status: 500, headers: { 'Content-Type': 'application/json' } }
-        );
+        return jsonResponse({ error: 'OpenAI API key not configured' }, 500);
       }
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
           model,
           messages: [
-            {
-              role: 'system',
-              content: systemPrompt,
-            },
-            {
-              role: 'user',
-              content: text,
-            },
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: text },
           ],
           temperature: 0.3,
         }),
@@ -341,9 +382,9 @@ Return ONLY the JSON array. No other output.`;
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        return new Response(
-          JSON.stringify({ error: `OpenAI API error: ${errorData.error?.message || response.statusText}` }),
-          { status: response.status, headers: { 'Content-Type': 'application/json' } }
+        return jsonResponse(
+          { error: `OpenAI API error: ${errorData.error?.message || response.statusText}` },
+          response.status
         );
       }
 
@@ -351,10 +392,7 @@ Return ONLY the JSON array. No other output.`;
       rawText = data.choices?.[0]?.message?.content || '';
     } else if (provider === 'anthropic') {
       if (!ANTHROPIC_API_KEY) {
-        return new Response(
-          JSON.stringify({ error: 'Anthropic API key not configured' }),
-          { status: 500, headers: { 'Content-Type': 'application/json' } }
-        );
+        return jsonResponse({ error: 'Anthropic API key not configured' }, 500);
       }
 
       const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -368,20 +406,15 @@ Return ONLY the JSON array. No other output.`;
           model,
           max_tokens: 4096,
           system: systemPrompt,
-          messages: [
-            {
-              role: 'user',
-              content: text,
-            },
-          ],
+          messages: [{ role: 'user', content: text }],
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        return new Response(
-          JSON.stringify({ error: `Anthropic API error: ${errorData.error?.message || response.statusText}` }),
-          { status: response.status, headers: { 'Content-Type': 'application/json' } }
+        return jsonResponse(
+          { error: `Anthropic API error: ${errorData.error?.message || response.statusText}` },
+          response.status
         );
       }
 
@@ -389,27 +422,18 @@ Return ONLY the JSON array. No other output.`;
       rawText = data.content?.[0]?.text || '';
     } else if (provider === 'gemini') {
       if (!GEMINI_API_KEY) {
-        return new Response(
-          JSON.stringify({ error: 'Gemini API key not configured' }),
-          { status: 500, headers: { 'Content-Type': 'application/json' } }
-        );
+        return jsonResponse({ error: 'Gemini API key not configured' }, 500);
       }
 
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [
               {
-                parts: [
-                  {
-                    text: `${systemPrompt}\n\nINPUT:\n${text}`,
-                  },
-                ],
+                parts: [{ text: `${systemPrompt}\n\nINPUT:\n${text}` }],
               },
             ],
             generationConfig: {
@@ -422,54 +446,34 @@ Return ONLY the JSON array. No other output.`;
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        return new Response(
-          JSON.stringify({ error: `Gemini API error: ${errorData.error?.message || response.statusText}` }),
-          { status: response.status, headers: { 'Content-Type': 'application/json' } }
+        return jsonResponse(
+          { error: `Gemini API error: ${errorData.error?.message || response.statusText}` },
+          response.status
         );
       }
 
       const data = await response.json();
       rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     } else {
-      return new Response(
-        JSON.stringify({ error: `Unsupported provider: ${provider}` }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ error: `Unsupported provider: ${provider}` }, 400);
     }
 
     if (!rawText) {
-      return new Response(
-        JSON.stringify({ error: 'Empty response from AI provider' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ error: 'Empty response from AI provider' }, 500);
     }
 
-    return new Response(
-      JSON.stringify({
-        rawText,
-        remaining: rateLimitData[0].remaining,
-      }),
-      {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-      }
-    );
-  // @ts-expect-error - Deno runtime: TypeScript parser doesn't recognize try-catch in Deno.serve context
+    return jsonResponse({
+      rawText,
+      remaining,
+    });
   } catch (error: unknown) {
     console.error('Edge function error:', error);
-    return new Response(
-      JSON.stringify({
+    return jsonResponse(
+      {
         error: 'Internal server error',
         message: error instanceof Error ? error.message : 'Unknown error',
-      }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
+      },
+      500
     );
   }
 });
-

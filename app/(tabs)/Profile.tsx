@@ -252,11 +252,55 @@ const Profile: React.FC = () => {
     try {
       if (aiSettings.executionMode === 'hosted') {
         // Test hosted mode by calling health endpoint
-        const { error } = await supabase.functions.invoke('parse-workout-text', {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const accessToken = session?.access_token?.trim();
+
+        if (!accessToken) {
+          setTestKeyResult({
+            success: false,
+            message: 'No active session found. Please sign out and sign back in, then try again.',
+          });
+          return;
+        }
+
+        const invokeOptions: any = {
           body: { provider: aiSettings.provider, model: aiSettings.model, text: 'test' },
-        });
+        };
+        invokeOptions.headers = { Authorization: `Bearer ${accessToken}` };
+
+        const { error } = await supabase.functions.invoke('parse-workout-text', invokeOptions);
         if (error) {
-          setTestKeyResult({ success: false, message: error.message });
+          // Try to surface useful Edge Function error JSON (e.g. { error, details, diag })
+          const anyError: any = error as any;
+          let extra = '';
+          const ctx = anyError?.context;
+          if (ctx) {
+            try {
+              // supabase-js may give context as:
+              // - a Response
+              // - { response: Response }
+              // - { body: string }
+              if (typeof ctx === 'string') {
+                extra = ctx;
+              } else if (typeof ctx?.body === 'string') {
+                extra = ctx.body;
+              } else if (typeof ctx?.text === 'function') {
+                extra = await ctx.text();
+              } else if (typeof ctx?.response?.text === 'function') {
+                extra = await ctx.response.text();
+              } else {
+                extra = JSON.stringify(ctx);
+              }
+            } catch {
+              // ignore
+            }
+          }
+          setTestKeyResult({
+            success: false,
+            message: extra ? `${error.message} | ${extra}` : error.message,
+          });
         } else {
           setTestKeyResult({ success: true, message: 'Hosted mode connection successful' });
         }
