@@ -1,7 +1,14 @@
 {
-  "editor.codeActionsOnSave": {
-    "source.fixAll": "explicit",
-    "source.organizeImports": "explicit",
-    "source.sortMembers": "explicit"
-  }
+  "typescript.validate.enable": true,
+  "typescript.tsserver.experimental.enableProjectDiagnostics": false,
+  "files.associations": {
+    "**/supabase/functions/**/*.ts": "plaintext"
+  },
+  "typescript.preferences.includePackageJsonAutoImports": "off",
+  "[plaintext]": {
+    "editor.defaultFormatter": null
+  },
+  "typescript.tsserver.exclude": [
+    "**/supabase/functions/**"
+  ]
 }

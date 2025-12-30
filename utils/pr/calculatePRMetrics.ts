@@ -3,11 +3,82 @@
 
 import { WorkoutSession } from '../workoutSessions';
 
+export type E1RMConfidence = 'high' | 'medium' | 'low';
+
 export interface PRMetric {
   exercise: string;
   maxWeight: number;
   reps: number;
   date: string;
+  estimated1RM?: number;
+  e1rmConfidence?: E1RMConfidence;
+  e1rmConfidenceReasons?: string[];
+}
+
+export function calculateE1RM(weight: number, reps: number): number {
+  // Epley: e1rm = weight * (1 + reps/30)
+  return weight * (1 + reps / 30);
+}
+
+function toDate(value: string | Date | undefined): Date | undefined {
+  if (!value) return undefined;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
+function daysBetween(earlier: Date, later: Date): number {
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return Math.floor((later.getTime() - earlier.getTime()) / msPerDay);
+}
+
+export function getE1RMConfidence(params: {
+  reps: number;
+  prDate: string | Date;
+  referenceDate?: string | Date;
+}): { confidence: E1RMConfidence; reasons: string[] } {
+  const reasons: string[] = [];
+
+  const reps = params.reps ?? 0;
+  if (!Number.isFinite(reps) || reps <= 0) {
+    reasons.push('missing/invalid reps');
+  }
+
+  const prDate = toDate(params.prDate);
+  const referenceDate = toDate(params.referenceDate) ?? new Date();
+
+  let dateDaysAgo: number | undefined;
+  if (!prDate) {
+    reasons.push('missing/invalid PR date');
+  } else {
+    dateDaysAgo = daysBetween(prDate, referenceDate);
+    if (dateDaysAgo < 0) dateDaysAgo = 0; // future dates treated as "today"
+  }
+
+  const repsScore: E1RMConfidence =
+    reps >= 1 && reps <= 5 ? 'high' : reps >= 6 && reps <= 10 ? 'medium' : 'low';
+
+  const dateScore: E1RMConfidence =
+    dateDaysAgo === undefined
+      ? 'low'
+      : dateDaysAgo < 30
+        ? 'high'
+        : dateDaysAgo <= 90
+          ? 'medium'
+          : 'low';
+
+  if (repsScore !== 'high') {
+    reasons.push(repsScore === 'medium' ? 'moderate reps (6–10)' : 'high reps (11+)');
+  }
+  if (dateScore !== 'high') {
+    reasons.push(dateScore === 'medium' ? 'PR is 30–90 days old' : 'PR is >90 days old');
+  }
+
+  const rank = (c: E1RMConfidence) => (c === 'high' ? 3 : c === 'medium' ? 2 : 1);
+  const confidenceRank = Math.min(rank(repsScore), rank(dateScore));
+  const confidence: E1RMConfidence =
+    confidenceRank === 3 ? 'high' : confidenceRank === 2 ? 'medium' : 'low';
+
+  return { confidence, reasons };
 }
 
 /**
@@ -23,7 +94,10 @@ export interface PRMetric {
  * @param sessions - Array of workout sessions to analyze
  * @returns Array of PRMetric objects, one for each unique exercise
  */
-export function calculatePRMetrics(sessions: WorkoutSession[]): PRMetric[] {
+export function calculatePRMetrics(
+  sessions: WorkoutSession[],
+  opts?: { referenceDate?: string | Date }
+): PRMetric[] {
   const prMetrics: Record<string, PRMetric> = {};
 
   sessions.forEach(session => {
@@ -42,18 +116,34 @@ export function calculatePRMetrics(sessions: WorkoutSession[]): PRMetric[] {
           weight > prMetrics[key].maxWeight ||
           (weight === prMetrics[key].maxWeight && reps > prMetrics[key].reps)
         ) {
+          const estimated1RM = weight > 0 ? calculateE1RM(weight, reps) : undefined;
+          const { confidence: e1rmConfidence, reasons: e1rmConfidenceReasons } =
+            weight > 0
+              ? getE1RMConfidence({
+                  reps,
+                  prDate: session.performedOn,
+                  referenceDate: opts?.referenceDate,
+                })
+              : {
+                  confidence: 'low' as const,
+                  reasons: ['bodyweight/unparsed load'],
+                };
+
           prMetrics[key] = {
             exercise: ex.nameRaw,
             maxWeight: weight,
             reps: reps,
             date: session.performedOn,
+            estimated1RM,
+            e1rmConfidence,
+            e1rmConfidenceReasons,
           };
         }
       });
     });
   });
 
-  return Object.values(prMetrics);
+  return Object.values(prMetrics).sort((a, b) => a.exercise.localeCompare(b.exercise));
 }
 
 /**

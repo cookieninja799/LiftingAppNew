@@ -315,7 +315,16 @@ const Profile: React.FC = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <Pressable className="flex-1" onPress={Keyboard.dismiss}>
+      <Pressable className="flex-1" onPress={(e) => {
+        // On web, don't dismiss keyboard if clicking on an input element or button
+        if (Platform.OS === 'web') {
+          const targetTag = (e?.nativeEvent?.target as HTMLElement)?.tagName;
+          if (targetTag === 'INPUT' || targetTag === 'TEXTAREA' || targetTag === 'BUTTON') {
+            return; // Don't dismiss keyboard when clicking on inputs or buttons
+          }
+        }
+        Keyboard.dismiss();
+      }}>
         <ScrollView 
           contentContainerStyle={{ padding: 20 }} 
           keyboardShouldPersistTaps="handled"

@@ -90,6 +90,56 @@ export class GeminiProvider implements AIProvider {
     }
   }
 
+  async complete(systemPrompt: string, userText: string, apiKey: string): Promise<ParseWorkoutTextResult> {
+    try {
+      const response = await fetch(
+        `${GEMINI_API_BASE}/models/${this.model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: `${systemPrompt}\n\nINPUT:\n${userText}`,
+                  },
+                ],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.3,
+            },
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw this.mapError(response.status, errorData);
+      }
+
+      const data = await response.json();
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      if (!rawText) {
+        throw new ProviderError('provider_error', 'Empty response from Gemini');
+      }
+
+      return { rawText };
+    } catch (error) {
+      if (error instanceof ProviderError) {
+        throw error;
+      }
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new ProviderError('network_error', 'Network request failed', error);
+      }
+      throw new ProviderError('provider_error', `Gemini API error: ${error instanceof Error ? error.message : 'Unknown error'}`, error);
+    }
+  }
+
   private mapError(status: number, errorData: any): ProviderError {
     if (status === 401 || status === 403) {
       return new ProviderError('invalid_api_key', 'Invalid API key');

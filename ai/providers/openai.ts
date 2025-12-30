@@ -80,6 +80,54 @@ export class OpenAIProvider implements AIProvider {
     }
   }
 
+  async complete(systemPrompt: string, userText: string, apiKey: string): Promise<ParseWorkoutTextResult> {
+    try {
+      const response = await fetch(`${OPENAI_API_BASE}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt,
+            },
+            {
+              role: 'user',
+              content: userText,
+            },
+          ],
+          temperature: 0.3,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw this.mapError(response.status, errorData);
+      }
+
+      const data = await response.json();
+      const rawText = data.choices?.[0]?.message?.content || '';
+
+      if (!rawText) {
+        throw new ProviderError('provider_error', 'Empty response from OpenAI');
+      }
+
+      return { rawText };
+    } catch (error) {
+      if (error instanceof ProviderError) {
+        throw error;
+      }
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new ProviderError('network_error', 'Network request failed', error);
+      }
+      throw new ProviderError('provider_error', `OpenAI API error: ${error instanceof Error ? error.message : 'Unknown error'}`, error);
+    }
+  }
+
   private mapError(status: number, errorData: any): ProviderError {
     if (status === 401) {
       return new ProviderError('invalid_api_key', 'Invalid API key');

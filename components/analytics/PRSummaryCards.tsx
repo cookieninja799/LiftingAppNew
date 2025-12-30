@@ -2,15 +2,9 @@
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Text } from '@/components/ui/text';
+import { PRMetric } from '@/utils/pr/calculatePRMetrics';
 import React from 'react';
 import { View } from 'react-native';
-
-export interface PRMetric {
-  exercise: string;
-  maxWeight: number;
-  reps: number;
-  date: string;
-}
 
 interface PRSummaryCardsProps {
   prMetrics: PRMetric[];
@@ -39,6 +33,14 @@ const PRSummaryCards: React.FC<PRSummaryCardsProps> = ({ prMetrics, period }) =>
             <View>
               <Text variant="h3" className="text-primary">{metric.maxWeight} lbs</Text>
               <Text variant="muted" className="text-[10px] uppercase">at {metric.reps} reps</Text>
+            </View>
+            <View>
+              <Text variant="muted" className="text-[10px] uppercase">
+                Est. 1RM: {typeof metric.estimated1RM === 'number' ? `${Math.round(metric.estimated1RM)} lbs` : '—'}
+              </Text>
+              <Text variant="muted" className="text-[10px] uppercase">
+                Confidence: {(metric.e1rmConfidence ?? 'low').toUpperCase()}
+              </Text>
             </View>
             <Separator />
             <Text variant="muted" className="text-[10px]">

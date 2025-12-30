@@ -4,8 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 import { Colors } from '@/constants/Colors';
 import { workoutRepository } from '@/data/WorkoutRepositoryManager';
-import { PRMetric } from '@/utils/pr/calculatePRMetrics';
-import { WorkoutSession } from '@/utils/workoutSessions';
+import { calculatePRMetrics, PRMetric } from '@/utils/pr/calculatePRMetrics';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useMemo, useState } from 'react';
@@ -16,32 +15,6 @@ const PRTab: React.FC = () => {
   const colorScheme = useEffectiveColorScheme();
   const [prMetrics, setPRMetrics] = useState<PRMetric[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-
-  const calculatePRMetrics = (sessions: WorkoutSession[]): PRMetric[] => {
-    const prMetrics: Record<string, PRMetric> = {};
-    sessions.forEach(session => {
-      session.exercises.forEach(ex => {
-        ex.sets.forEach((set) => {
-          const weight = parseFloat(set.weightText.replace(/[^\d.]/g, "")) || 0;
-          const reps = set.reps || 0;
-          const key = ex.nameRaw.toLowerCase();
-          if (
-            !prMetrics[key] ||
-            weight > prMetrics[key].maxWeight ||
-            (weight === prMetrics[key].maxWeight && reps > prMetrics[key].reps)
-          ) {
-            prMetrics[key] = {
-              exercise: ex.nameRaw,
-              maxWeight: weight,
-              reps: reps,
-              date: session.performedOn,
-            };
-          }
-        });
-      });
-    });
-    return Object.values(prMetrics).sort((a, b) => a.exercise.localeCompare(b.exercise));
-  };
 
   useFocusEffect(
     useCallback(() => {

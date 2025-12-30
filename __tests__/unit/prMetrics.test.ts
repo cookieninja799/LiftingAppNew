@@ -3,6 +3,7 @@ import {
     calculatePRMetrics,
     filterPRMetricsBySearch,
     getTopPRs,
+    getE1RMConfidence,
     PRMetric,
     sortPRMetricsByWeight,
 } from '../../utils/pr/calculatePRMetrics';
@@ -28,6 +29,26 @@ describe('calculatePRMetrics', () => {
 
       // 205 lbs @ 5 reps was achieved on 2024-12-12
       expect(benchPR?.date).toBe('2024-12-12');
+    });
+  });
+
+  describe('e1RM + confidence', () => {
+    it('should attach estimated 1RM and confidence based on PR set', () => {
+      const prMetrics = calculatePRMetrics(prTestSessions, { referenceDate: '2024-12-20' });
+      const benchPR = prMetrics.find(pr => pr.exercise.toLowerCase() === 'bench press');
+
+      // e1RM (Epley) = 205 * (1 + 5/30) = 239.166...
+      expect(benchPR?.estimated1RM).toBeCloseTo(239.166, 2);
+      expect(benchPR?.e1rmConfidence).toBe('high');
+    });
+
+    it('should treat bodyweight/unparsed loads as low confidence with missing e1RM', () => {
+      const prMetrics = calculatePRMetrics(bodyweightSessions, { referenceDate: '2024-12-20' });
+      const pullUpPR = prMetrics.find(pr => pr.exercise.toLowerCase() === 'pull-ups');
+
+      expect(pullUpPR?.estimated1RM).toBeUndefined();
+      expect(pullUpPR?.e1rmConfidence).toBe('low');
+      expect(pullUpPR?.e1rmConfidenceReasons).toContain('bodyweight/unparsed load');
     });
   });
 
@@ -210,6 +231,18 @@ describe('calculatePRMetrics', () => {
       expect(benchPRs).toHaveLength(1);
       expect(benchPRs[0].maxWeight).toBe(235);
     });
+  });
+});
+
+describe('getE1RMConfidence', () => {
+  it('should be deterministic with a fixed referenceDate', () => {
+    const { confidence } = getE1RMConfidence({
+      reps: 5,
+      prDate: '2024-12-12',
+      referenceDate: '2024-12-20',
+    });
+
+    expect(confidence).toBe('high');
   });
 });
 

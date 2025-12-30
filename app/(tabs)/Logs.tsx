@@ -8,6 +8,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
     Alert,
     Modal,
+    Platform,
     Pressable,
     ScrollView,
     View
@@ -130,10 +131,17 @@ export default function Logs() {
   };
 
   const confirmDeleteExercise = (sessionId: string, exerciseId: string) => {
-    Alert.alert('Delete Exercise', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteExercise(sessionId, exerciseId) },
-    ]);
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Delete Exercise - Are you sure?');
+      if (confirmed) {
+        deleteExercise(sessionId, exerciseId);
+      }
+    } else {
+      Alert.alert('Delete Exercise', 'Are you sure?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteExercise(sessionId, exerciseId) },
+      ]);
+    }
   };
 
   const deleteSession = async (sessionId: string) => {
@@ -143,10 +151,17 @@ export default function Logs() {
   };
 
   const confirmDeleteSession = (sessionId: string) => {
-    Alert.alert('Delete Session', 'Delete entire log for this day?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteSession(sessionId) },
-    ]);
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Delete Session - Delete entire log for this day?');
+      if (confirmed) {
+        deleteSession(sessionId);
+      }
+    } else {
+      Alert.alert('Delete Session', 'Delete entire log for this day?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteSession(sessionId) },
+      ]);
+    }
   };
 
   const editExercise = (sessionId: string, exercise: WorkoutExercise) => {
@@ -319,7 +334,10 @@ export default function Logs() {
                         </Text>
                       </View>
                       <View className="flex-row items-center gap-4">
-                        <Pressable onPress={() => confirmDeleteSession(session.id)}>
+                        <Pressable onPress={(e) => {
+                          e.stopPropagation();
+                          confirmDeleteSession(session.id);
+                        }}>
                           <Ionicons name="trash-outline" size={20} color={destructiveColor} />
                         </Pressable>
                         <Ionicons 

@@ -33,5 +33,10 @@ export interface AIProvider {
    * Tests if an API key is valid
    */
   testKey(apiKey: string): Promise<{ success: boolean; error?: ProviderErrorCode; message?: string }>;
+
+  /**
+   * Completes a prompt with a custom system prompt (Phase 4: for Ask/Plan intents)
+   */
+  complete(systemPrompt: string, userText: string, apiKey: string): Promise<ParseWorkoutTextResult>;
 }
 

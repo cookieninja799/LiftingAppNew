@@ -8,12 +8,15 @@ export type AIProvider = 'openai' | 'anthropic' | 'gemini';
 
 export type ExecutionMode = 'byok' | 'hosted';
 
+export type AIMode = 'log' | 'ask' | 'plan';
+
 export interface AISettings {
   provider: AIProvider;
   model: string;
   executionMode: ExecutionMode;
   useTemplateMuscles: boolean;
   allowModelProvidedMuscles: boolean;
+  uiMode?: AIMode; // Phase 4: UI mode selector (Log/Ask/Plan)
 }
 
 const AI_SETTINGS_KEY = 'ai_settings_v1';
@@ -24,6 +27,7 @@ const DEFAULT_SETTINGS: AISettings = {
   executionMode: 'byok',
   useTemplateMuscles: true,
   allowModelProvidedMuscles: false,
+  uiMode: 'log', // Default to Log mode (Phase 3 behavior)
 };
 
 /**

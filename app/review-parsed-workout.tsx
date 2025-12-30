@@ -9,7 +9,6 @@ import {
   Alert,
   ScrollView,
   View,
-  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
