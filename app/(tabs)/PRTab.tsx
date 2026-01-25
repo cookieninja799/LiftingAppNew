@@ -5,6 +5,7 @@ import { Text } from '@/components/ui/text';
 import { Colors } from '@/constants/Colors';
 import { workoutRepository } from '@/data/WorkoutRepositoryManager';
 import { calculatePRMetrics, PRMetric } from '@/utils/pr/calculatePRMetrics';
+import { loadNormalizationSettings } from '@/utils/data/normalizationSettings';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useMemo, useState } from 'react';
@@ -20,7 +21,10 @@ const PRTab: React.FC = () => {
     useCallback(() => {
       (async () => {
         try {
-          const sessions = await workoutRepository.listSessions();
+          const [sessions, normalizationSettings] = await Promise.all([
+            workoutRepository.listSessions(),
+            loadNormalizationSettings(),
+          ]);
           console.log('[PRTab] Loaded sessions:', sessions?.length || 0);
           if (!sessions || sessions.length === 0) {
             setPRMetrics([]);
@@ -36,7 +40,9 @@ const PRTab: React.FC = () => {
           );
           console.log('[PRTab] Total exercises:', totalExercises, 'Total sets:', totalSets);
           
-          const computedPRMetrics = calculatePRMetrics(sessions);
+          const computedPRMetrics = calculatePRMetrics(sessions, {
+            normalizeNames: normalizationSettings.enableNormalization,
+          });
           console.log('[PRTab] Computed PR metrics:', computedPRMetrics.length);
           setPRMetrics(computedPRMetrics);
         } catch (error) {
@@ -49,9 +55,12 @@ const PRTab: React.FC = () => {
 
   const filteredMetrics = useMemo(() => {
     if (!searchQuery.trim()) return prMetrics;
-    return prMetrics.filter(metric =>
-      metric.exercise.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const query = searchQuery.toLowerCase();
+    return prMetrics.filter(metric => {
+      if (metric.exercise.toLowerCase().includes(query)) return true;
+      if (metric.variations?.some((v) => v.toLowerCase().includes(query))) return true;
+      return false;
+    });
   }, [searchQuery, prMetrics]);
 
   return (

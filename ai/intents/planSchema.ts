@@ -12,6 +12,12 @@ export const PlanIntentSchema = z.object({
   includeWeights: z.boolean().optional(),
   // New: Specific exercises the user wants to include
   requestedExercises: z.array(z.string()).optional(),
+  // New: progression preference for overload
+  progressionStyle: z.enum(['aggressive', 'gradual', 'maintenance', 'deload']).optional(),
+  // New: exercises to avoid
+  avoidExercises: z.array(z.string()).optional(),
+  // New: equipment constraints
+  equipmentAvailable: z.array(z.string()).optional(),
 });
 
 export type PlanIntent = z.infer<typeof PlanIntentSchema>;

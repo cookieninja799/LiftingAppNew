@@ -46,6 +46,17 @@ const PRSummaryCards: React.FC<PRSummaryCardsProps> = ({ prMetrics, period }) =>
             <Text variant="muted" className="text-[10px]">
               Achieved: {new Date(metric.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
             </Text>
+            {metric.variations && metric.variations.length > 0 && (() => {
+              const variants = metric.variations.filter(
+                (v) => v.toLowerCase() !== metric.exercise.toLowerCase()
+              );
+              if (variants.length === 0) return null;
+              return (
+                <Text variant="muted" className="text-[10px]">
+                  Also logged as: {variants.join(', ')}
+                </Text>
+              );
+            })()}
           </CardContent>
         </Card>
       ))}

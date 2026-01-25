@@ -58,7 +58,8 @@ function formatExercise(exercise: ExercisePlan): FormattedPlanExercise {
   
   if (exercise.recommendedWeight) {
     const rw = exercise.recommendedWeight;
-    weight = `${rw.value} ${rw.unit}`;
+    const basis = rw.basedOn ? ` (${rw.basedOn})` : '';
+    weight = `${rw.value} ${rw.unit}${basis}`;
     
     if (rw.percentageOfMax) {
       weight += ` (~${rw.percentageOfMax}% 1RM)`;

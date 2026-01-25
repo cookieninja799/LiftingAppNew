@@ -44,7 +44,7 @@ describe('calculatePRMetrics', () => {
 
     it('should treat bodyweight/unparsed loads as low confidence with missing e1RM', () => {
       const prMetrics = calculatePRMetrics(bodyweightSessions, { referenceDate: '2024-12-20' });
-      const pullUpPR = prMetrics.find(pr => pr.exercise.toLowerCase() === 'pull-ups');
+      const pullUpPR = prMetrics.find(pr => pr.exercise.toLowerCase() === 'pull up');
 
       expect(pullUpPR?.estimated1RM).toBeUndefined();
       expect(pullUpPR?.e1rmConfidence).toBe('low');
@@ -69,12 +69,12 @@ describe('calculatePRMetrics', () => {
 
       expect(prMetrics).toHaveLength(2); // Bench Press and Squats
       expect(prMetrics.some(pr => pr.exercise.toLowerCase() === 'bench press')).toBe(true);
-      expect(prMetrics.some(pr => pr.exercise.toLowerCase() === 'squats')).toBe(true);
+      expect(prMetrics.some(pr => pr.exercise.toLowerCase() === 'squat')).toBe(true);
     });
 
     it('should get correct PR for each exercise', () => {
       const prMetrics = calculatePRMetrics(prTestSessions);
-      const squatPR = prMetrics.find(pr => pr.exercise.toLowerCase() === 'squats');
+      const squatPR = prMetrics.find(pr => pr.exercise.toLowerCase() === 'squat');
 
       expect(squatPR?.maxWeight).toBe(315);
       expect(squatPR?.reps).toBe(3);
@@ -89,7 +89,7 @@ describe('calculatePRMetrics', () => {
 
     it('should handle exercises with string weights (bodyweight)', () => {
       const prMetrics = calculatePRMetrics(bodyweightSessions);
-      const pullUpPR = prMetrics.find(pr => pr.exercise.toLowerCase() === 'pull-ups');
+      const pullUpPR = prMetrics.find(pr => pr.exercise.toLowerCase() === 'pull up');
       
       // 'bodyweight' parses to 0 with parseFloat
       expect(pullUpPR?.maxWeight).toBe(0);
@@ -97,7 +97,7 @@ describe('calculatePRMetrics', () => {
 
     it('should handle weighted bodyweight exercises', () => {
       const prMetrics = calculatePRMetrics(bodyweightSessions);
-      const weightedPR = prMetrics.find(pr => pr.exercise.toLowerCase() === 'weighted pull-ups');
+      const weightedPR = prMetrics.find(pr => pr.exercise.toLowerCase() === 'weighted pull up');
 
       // Highest weight added: 45 lbs
       expect(weightedPR?.maxWeight).toBe(45);

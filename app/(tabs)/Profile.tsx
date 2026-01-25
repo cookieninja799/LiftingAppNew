@@ -1,6 +1,7 @@
 import { ThemePreference, useEffectiveColorScheme, useThemeContext } from '@/components/theme';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { startTransition, useDeferredValue, useEffect, useState } from 'react';
 import {
@@ -44,6 +45,15 @@ import {
 import { createProvider } from '@/ai/providers';
 import { parseWorkoutText } from '@/ai/AIParser';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'expo-router';
+import { batchNormalizeExercises } from '@/utils/data/batchNormalizeExercises';
+import { batchTagMuscleGroups } from '@/utils/data/batchTagMuscleGroups';
+import { loadNormalizationReviewItems } from '@/utils/data/exerciseNormalizationReview';
+import {
+  loadNormalizationSettings,
+  saveNormalizationSettings,
+  NormalizationSettings,
+} from '@/utils/data/normalizationSettings';
 
 const themeOptions = [
   { label: 'System', value: 'system' },
@@ -55,6 +65,7 @@ const Profile: React.FC = () => {
   const colorScheme = useEffectiveColorScheme();
   const { preference, setPreference } = useThemeContext();
   const { user, signOut } = useAuth();
+  const router = useRouter();
   // Defer the preference value to prevent rendering during theme transitions
   const deferredPreference = useDeferredValue(preference);
   const [age, setAge] = useState('');
@@ -79,6 +90,12 @@ const Profile: React.FC = () => {
   const [parsePreviewText, setParsePreviewText] = useState('');
   const [isParsingPreview, setIsParsingPreview] = useState(false);
   const [parsePreviewResult, setParsePreviewResult] = useState<any>(null);
+  const [normalizationSettings, setNormalizationSettings] = useState<NormalizationSettings>({
+    enableNormalization: true,
+  });
+  const [pendingNormalizationCount, setPendingNormalizationCount] = useState(0);
+  const [isNormalizing, setIsNormalizing] = useState(false);
+  const [isTaggingMuscleGroups, setIsTaggingMuscleGroups] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -100,9 +117,25 @@ const Profile: React.FC = () => {
       if (key) {
         setApiKey(key);
       }
+
+      const normalization = await loadNormalizationSettings();
+      setNormalizationSettings(normalization);
+      const pending = await loadNormalizationReviewItems();
+      setPendingNormalizationCount(pending.length);
     };
     fetchProfile();
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      refreshPendingNormalizations();
+    }, [])
+  );
+
+  const refreshPendingNormalizations = async () => {
+    const pending = await loadNormalizationReviewItems();
+    setPendingNormalizationCount(pending.length);
+  };
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -343,6 +376,68 @@ const Profile: React.FC = () => {
       });
     } finally {
       setIsParsingPreview(false);
+    }
+  };
+
+  const handleRunNormalization = async () => {
+    if (!normalizationSettings.enableNormalization) {
+      Alert.alert('Disabled', 'Enable normalization to run the batch update.');
+      return;
+    }
+
+    setIsNormalizing(true);
+    try {
+      const result = await batchNormalizeExercises({
+        useAIFallback: true,
+        supabaseClient: supabase,
+        dryRun: false,
+      });
+      await refreshPendingNormalizations();
+      Alert.alert(
+        'Normalization Complete',
+        `Updated ${result.normalized} exercises. ${result.needsReview} need review.`
+      );
+    } catch (error) {
+      console.error('Normalization failed:', error);
+      Alert.alert('Error', 'Failed to normalize exercise names.');
+    } finally {
+      setIsNormalizing(false);
+    }
+  };
+
+  const handleSaveNormalizationSettings = async (enabled: boolean) => {
+    const next = { ...normalizationSettings, enableNormalization: enabled };
+    setNormalizationSettings(next);
+    try {
+      await saveNormalizationSettings(next);
+    } catch (error) {
+      console.error('Failed to save normalization settings:', error);
+    }
+  };
+
+  const handleTagMuscleGroups = async () => {
+    setIsTaggingMuscleGroups(true);
+    try {
+      const result = await batchTagMuscleGroups({
+        dryRun: false,
+        forceUpdate: false, // Only tag exercises that don't have muscle data
+      });
+      
+      const muscleGroupSummary = Object.entries(result.exercisesByMuscleGroup)
+        .map(([group, count]) => `${group}: ${count}`)
+        .join(', ');
+      
+      Alert.alert(
+        'Muscle Group Tagging Complete',
+        `Tagged ${result.tagged} exercises across ${result.updatedSessions} sessions.\n` +
+        `${result.skipped} exercises skipped (already tagged).\n\n` +
+        (muscleGroupSummary ? `Muscle groups: ${muscleGroupSummary}` : '')
+      );
+    } catch (error) {
+      console.error('Muscle group tagging failed:', error);
+      Alert.alert('Error', 'Failed to tag muscle groups.');
+    } finally {
+      setIsTaggingMuscleGroups(false);
     }
   };
 
@@ -694,6 +789,62 @@ const Profile: React.FC = () => {
                   )}
                 </View>
               )}
+            </CardContent>
+          </Card>
+
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Exercise Name Normalization</CardTitle>
+              <CardDescription>Merge similar exercise names for cleaner PRs</CardDescription>
+            </CardHeader>
+            <CardContent className="gap-4">
+              <View>
+                <Text variant="small" className="mb-1.5 ml-1">Enable Normalization</Text>
+                <SegmentedControl
+                  options={[
+                    { label: 'ON', value: 'true' },
+                    { label: 'OFF', value: 'false' },
+                  ]}
+                  value={String(normalizationSettings.enableNormalization)}
+                  onChange={(value) => handleSaveNormalizationSettings(value === 'true')}
+                />
+              </View>
+
+              <View className="flex-row gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  label={isNormalizing ? 'Normalizing...' : 'Run Batch Migration'}
+                  onPress={handleRunNormalization}
+                  disabled={isNormalizing}
+                  className="flex-1"
+                />
+                <Button
+                  size="sm"
+                  label={`Review (${pendingNormalizationCount})`}
+                  onPress={() => router.push('/review-exercise-names')}
+                  disabled={pendingNormalizationCount === 0}
+                  className="flex-1"
+                />
+              </View>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Muscle Group Tagging</CardTitle>
+              <CardDescription>
+                Tag existing exercises with muscle groups and contributions based on exercise templates.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                variant="outline"
+                size="sm"
+                label={isTaggingMuscleGroups ? 'Tagging...' : 'Tag All Exercises'}
+                onPress={handleTagMuscleGroups}
+                disabled={isTaggingMuscleGroups}
+              />
             </CardContent>
           </Card>
 

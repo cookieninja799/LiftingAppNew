@@ -3,6 +3,7 @@
 
 import { ParsedExercise } from '@/utils/assistantParsing';
 import { getDefaultMuscleContributions } from '@/utils/analytics/muscleContributions';
+import { normalizeExerciseName } from '@/utils/exerciseNormalization';
 
 export type Confidence = 'high' | 'low';
 
@@ -18,6 +19,7 @@ export interface RawParsedExercise {
   id?: string;
   exercise?: string;
   nameRaw?: string;
+  nameCanonical?: string;
   sets?: number;
   reps?: number[] | null;
   weights?: Array<string | number> | null;
@@ -85,6 +87,14 @@ export function validateAndNormalize(
   // Normalize each exercise
   for (const raw of rawExercises) {
     const exerciseName = raw.exercise || raw.nameRaw || 'Unknown Exercise';
+    const normalized = normalizeExerciseName(exerciseName);
+    const nameCanonical =
+      typeof raw.nameCanonical === 'string' && raw.nameCanonical.trim().length > 0
+        ? raw.nameCanonical.trim()
+        : normalized.canonical;
+    if (normalized.confidence === 'low') {
+      warnings.push(`Low confidence exercise normalization for "${exerciseName}"`);
+    }
     const sets = typeof raw.sets === 'number' && raw.sets > 0 ? raw.sets : 1;
     const repsProvided = Array.isArray(raw.reps) ? raw.reps : null;
     const weightsProvided = Array.isArray(raw.weights) ? raw.weights : null;
@@ -142,6 +152,14 @@ export function validateAndNormalize(
       if (templateContributions && templateContributions.length > 0) {
         primaryMuscleGroup = templateContributions[0].muscleGroup;
         muscleContributions = templateContributions;
+      } else if (allowModelProvidedMuscles && raw.muscleContributions) {
+        // Fallback to model-provided muscles when templates miss
+        const sanitized = sanitizeMuscleContributions(raw.muscleContributions);
+        if (sanitized && sanitized.length > 0) {
+          primaryMuscleGroup =
+            (typeof raw.primaryMuscleGroup === 'string' && raw.primaryMuscleGroup) || sanitized[0].muscleGroup;
+          muscleContributions = sanitized;
+        }
       }
     } else if (allowModelProvidedMuscles && raw.muscleContributions) {
       // Allow model-provided muscles (advanced)
@@ -166,6 +184,7 @@ export function validateAndNormalize(
       id,
       date,
       exercise: exerciseName,
+      nameCanonical,
       sets,
       reps: normalizedReps,
       weights: normalizedWeights,

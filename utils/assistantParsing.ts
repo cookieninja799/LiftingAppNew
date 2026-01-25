@@ -11,6 +11,7 @@ export type ParsedExercise = {
   id: string;
   date: string;
   exercise: string;
+  nameCanonical?: string;
   sets: number;
   reps: number[] | null;
   weights: string[] | null;
@@ -165,6 +166,7 @@ function normalizeExercise(
     id: idFactory(),
     date: exercise.date || defaultDate,
     exercise: exercise.exercise || 'Unknown Exercise',
+    nameCanonical: typeof exercise.nameCanonical === 'string' ? exercise.nameCanonical : undefined,
     sets: exercise.sets || 1,
     reps: Array.isArray(exercise.reps) ? exercise.reps : [],
     weights: Array.isArray(exercise.weights) ? exercise.weights : [],

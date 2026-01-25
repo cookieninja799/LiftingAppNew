@@ -102,6 +102,7 @@ export function mergeExercisesIntoSessions(
       id: exerciseId,
       sessionId: session.id,
       nameRaw: parsedResult.exercise,
+      nameCanonical: parsedResult.nameCanonical,
       primaryMuscleGroup: parsedResult.primaryMuscleGroup,
       muscleContributions: parsedResult.muscleContributions,
       sets: [],

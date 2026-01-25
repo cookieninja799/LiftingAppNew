@@ -2,11 +2,14 @@
 // Extracted PR calculation logic from PRTab.tsx for testability
 
 import { WorkoutSession } from '../workoutSessions';
+import { normalizeExerciseName } from '../exerciseNormalization';
 
 export type E1RMConfidence = 'high' | 'medium' | 'low';
 
 export interface PRMetric {
   exercise: string;
+  canonicalName?: string;
+  variations?: string[];
   maxWeight: number;
   reps: number;
   date: string;
@@ -96,16 +99,31 @@ export function getE1RMConfidence(params: {
  */
 export function calculatePRMetrics(
   sessions: WorkoutSession[],
-  opts?: { referenceDate?: string | Date }
+  opts?: { referenceDate?: string | Date; normalizeNames?: boolean }
 ): PRMetric[] {
   const prMetrics: Record<string, PRMetric> = {};
+  const variationsByKey: Record<string, Set<string>> = {};
+  const normalizeNames = opts?.normalizeNames !== false;
 
   sessions.forEach(session => {
     session.exercises.forEach(ex => {
       ex.sets.forEach(set => {
         const weight = parseFloat(set.weightText.replace(/[^\d.]/g, "")) || 0;
         const reps = set.reps || 0;
-        const key = ex.nameRaw.toLowerCase();
+        const fallbackCanonical =
+          ex.nameCanonical && ex.nameCanonical.trim().length > 0
+            ? ex.nameCanonical
+            : normalizeExerciseName(ex.nameRaw || '').canonical;
+        const canonicalName = normalizeNames
+          ? (fallbackCanonical || ex.nameRaw || '').trim()
+          : (ex.nameRaw || '').trim();
+        const key = canonicalName.toLowerCase();
+        if (!variationsByKey[key]) {
+          variationsByKey[key] = new Set<string>();
+        }
+        if (ex.nameRaw) {
+          variationsByKey[key].add(ex.nameRaw);
+        }
 
         // Update if:
         // 1. No record exists for this exercise
@@ -129,8 +147,12 @@ export function calculatePRMetrics(
                   reasons: ['bodyweight/unparsed load'],
                 };
 
+          // Use canonical name for exercise field (normalized, consistent)
+          // Original names are preserved in variations array
+          const exerciseName = canonicalName || ex.nameRaw || '';
           prMetrics[key] = {
-            exercise: ex.nameRaw,
+            exercise: exerciseName,
+            canonicalName: exerciseName,
             maxWeight: weight,
             reps: reps,
             date: session.performedOn,
@@ -143,7 +165,16 @@ export function calculatePRMetrics(
     });
   });
 
-  return Object.values(prMetrics).sort((a, b) => a.exercise.localeCompare(b.exercise));
+  return Object.values(prMetrics)
+    .map((metric) => {
+      const key = (metric.canonicalName || metric.exercise).toLowerCase();
+      const variations = Array.from(variationsByKey[key] || []);
+      return {
+        ...metric,
+        variations: variations.sort((a, b) => a.localeCompare(b)),
+      };
+    })
+    .sort((a, b) => a.exercise.localeCompare(b.exercise));
 }
 
 /**

@@ -225,6 +225,34 @@ describe('validateAndNormalize', () => {
       expect(result.success).toBe(true);
       expect(result.exercises![0].primaryMuscleGroup).toBeUndefined();
     });
+
+    it('should fall back to model muscles when templates miss', () => {
+      const result = validateAndNormalize(
+        [
+          {
+            exercise: 'Mystery Machine Press',
+            sets: 3,
+            reps: [10, 10, 10],
+            weights: ['135', '135', '135'],
+            primaryMuscleGroup: 'Chest',
+            muscleContributions: [
+              { muscleGroup: 'Chest', fraction: 1, isDirect: true },
+              { muscleGroup: 'Arms', fraction: 0.5 },
+            ],
+          },
+        ],
+        {
+          useTemplateMuscles: true,
+          allowModelProvidedMuscles: true,
+          dateFactory: defaultDateFactory,
+          idFactory: defaultIdFactory,
+        }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.exercises![0].primaryMuscleGroup).toBe('Chest');
+      expect(result.exercises![0].muscleContributions).toBeDefined();
+    });
   });
 
   describe('confidence scoring', () => {

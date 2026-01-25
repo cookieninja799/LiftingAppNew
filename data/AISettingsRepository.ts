@@ -26,7 +26,7 @@ const DEFAULT_SETTINGS: AISettings = {
   model: 'gpt-4o-mini',
   executionMode: 'byok',
   useTemplateMuscles: true,
-  allowModelProvidedMuscles: false,
+  allowModelProvidedMuscles: true,
   uiMode: 'log', // Default to Log mode (Phase 3 behavior)
 };
 

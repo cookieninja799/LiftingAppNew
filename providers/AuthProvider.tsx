@@ -18,17 +18,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        syncEngine.migrateLocalToCloud();
-      }
-      setLoading(false);
-    });
+    // Check for initial session with error handling
+    supabase.auth.getSession()
+      .then(({ data: { session }, error }) => {
+        if (error) {
+          console.warn('Failed to get session:', error.message);
+          // Continue with null session if network fails
+        }
+        setSession(session ?? null);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          syncEngine.migrateLocalToCloud();
+        }
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.warn('Error getting session:', error.message);
+        // Set loading to false even on error so app can continue
+        setSession(null);
+        setUser(null);
+        setLoading(false);
+      });
 
-    // Listen for auth changes
+    // Listen for auth changes with error handling
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);

@@ -6,6 +6,10 @@ import { Platform } from 'react-native';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn('Supabase configuration is missing. Some features may not work.');
+}
+
 // Custom storage to prevent "window is not defined" error during SSR/Node execution
 // We use a memory storage in Node to prevent AsyncStorage (which uses localStorage on web) from crashing
 const memoryStorage: Record<string, string> = {};
@@ -55,6 +59,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
+    flowType: 'pkce',
   },
 });
 

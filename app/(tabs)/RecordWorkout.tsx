@@ -12,6 +12,7 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Markdown } from '@/components/ui/markdown';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -32,8 +33,10 @@ import { PlanIntentSchema } from '@/ai/intents/planSchema';
 import { ASK_INTENT_SYSTEM_PROMPT, PLAN_INTENT_SYSTEM_PROMPT } from '@/ai/intents/prompts';
 import { executeAskIntent, AskResult } from '@/ai/intents/askExecutor';
 import { executePlanIntent, WorkoutPlan } from '@/ai/intents/planExecutor';
+import { runPlanAgent } from '@/ai/intents/planAgent/runPlanAgent';
 import { formatAskResult } from '@/ai/intents/askFormat';
 import { needsLLMResponse, generateConversationalResponse } from '@/ai/intents/askConversational';
+import { runAskAgent } from '@/ai/intents/askAgent/runAskAgent';
 
 export default function RecordWorkout() {
   const colorScheme = useEffectiveColorScheme();
@@ -42,8 +45,26 @@ export default function RecordWorkout() {
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [mode, setMode] = useState<AIMode>('log');
-  const [askResult, setAskResult] = useState<{ answerText: string; dataCard: any; suggestions?: string[] } | null>(null);
+  const [askResult, setAskResult] = useState<{ answerMarkdown: string; dataCard: any; suggestions?: string[] } | null>(null);
   const [planResult, setPlanResult] = useState<WorkoutPlan | null>(null);
+
+  const adjustPlanWeight = (exerciseIndex: number, delta: number) => {
+    setPlanResult((prev) => {
+      if (!prev) return prev;
+      const exercises = [...prev.exercises];
+      const target = exercises[exerciseIndex];
+      if (!target?.recommendedWeight) return prev;
+      const updated = {
+        ...target,
+        recommendedWeight: {
+          ...target.recommendedWeight,
+          value: Math.max(0, target.recommendedWeight.value + delta),
+        },
+      };
+      exercises[exerciseIndex] = updated;
+      return { ...prev, exercises };
+    });
+  };
 
   // Load mode from settings
   useEffect(() => {
@@ -142,7 +163,14 @@ export default function RecordWorkout() {
     setIsLoading(true);
     setAskResult(null);
     try {
-      // Parse intent
+      const agentResult = await runAskAgent(input.trim(), sessions, { supabaseClient: supabase });
+      if (agentResult) {
+        setAskResult(agentResult);
+        setInput('');
+        return;
+      }
+
+      // Fallback to legacy intent flow if agent fails
       const intentResult = await parseIntent(
         input.trim(),
         'ask_intent',
@@ -157,16 +185,17 @@ export default function RecordWorkout() {
         return;
       }
 
-      // Execute intent
       let result = await executeAskIntent(intentResult.intent, sessions);
-      
-      // If the result needs an LLM response (conversational intents), generate it
       if (needsLLMResponse(result)) {
         result = await generateConversationalResponse(result, { supabaseClient: supabase });
       }
-      
+
       const formatted = formatAskResult(result);
-      setAskResult(formatted);
+      setAskResult({
+        answerMarkdown: formatted.answerText,
+        dataCard: formatted.dataCard,
+        suggestions: formatted.suggestions,
+      });
       setInput('');
     } catch (error) {
       console.error('Error processing ask:', error);
@@ -185,6 +214,20 @@ export default function RecordWorkout() {
     setIsLoading(true);
     setPlanResult(null);
     try {
+      const agentPlan = await runPlanAgent(input.trim(), sessions, { supabaseClient: supabase });
+      if (agentPlan) {
+        const hasPersonalizedWeights = agentPlan.exercises.some((ex) => Boolean(ex.recommendedWeight));
+        setPlanResult({
+          title: agentPlan.title,
+          rationale: agentPlan.rationale,
+          exercises: agentPlan.exercises,
+          hasPersonalizedWeights,
+          isGeneric: false,
+        });
+        setInput('');
+        return;
+      }
+
       // Parse intent
       const intentResult = await parseIntent(
         input.trim(),
@@ -324,7 +367,9 @@ export default function RecordWorkout() {
               <CardTitle>Answer</CardTitle>
             </CardHeader>
             <CardContent>
-              <Text className="mb-4">{askResult.answerText}</Text>
+              <Markdown>
+                {askResult.answerMarkdown}
+              </Markdown>
               {askResult.suggestions && askResult.suggestions.length > 0 && !askResult.dataCard && (
                 <View className="mt-2">
                   <Text variant="small" className="text-muted-foreground mb-2">Try asking about:</Text>
@@ -356,6 +401,9 @@ export default function RecordWorkout() {
             </CardHeader>
             <CardContent>
               <View className="mb-4">
+                {planResult.rationale.some(r => r.toLowerCase().includes('standard')) && (
+                  <Badge variant="outline" label="Standards applied" className="mb-2" />
+                )}
                 {planResult.rationale.map((r, idx) => (
                   <Text key={idx} variant="small" className="mb-1">{r}</Text>
                 ))}
@@ -369,12 +417,44 @@ export default function RecordWorkout() {
                     <Text variant="small" className="text-muted-foreground">
                       {ex.sets} sets × {ex.reps} reps {ex.intensity && `@ ${ex.intensity}`}
                     </Text>
+                    {ex.recommendedWeight && (
+                      <View className="mt-2 gap-2">
+                        <View className="flex-row items-center justify-between">
+                          <Text className="font-semibold">
+                            {ex.recommendedWeight.value} {ex.recommendedWeight.unit}
+                          </Text>
+                          <Badge
+                            variant={ex.recommendedWeight.confidence === 'high' ? 'secondary' : ex.recommendedWeight.confidence === 'medium' ? 'outline' : 'destructive'}
+                            label={ex.recommendedWeight.confidence}
+                          />
+                        </View>
+                        <View className="flex-row gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            label="-2.5"
+                            onPress={() => adjustPlanWeight(idx, -2.5)}
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            label="+2.5"
+                            onPress={() => adjustPlanWeight(idx, 2.5)}
+                          />
+                        </View>
+                      </View>
+                    )}
                     {ex.notes && (
                       <Text variant="small" className="text-muted-foreground italic">{ex.notes}</Text>
                     )}
                   </View>
                 ))}
               </View>
+              {planResult.exercises.some(ex => ex.recommendedWeight) && (
+                <Text variant="small" className="text-muted-foreground mb-3">
+                  Tip: use +/- to fine-tune recommended weights.
+                </Text>
+              )}
               <Button
                 label="Use This Plan"
                 onPress={handleUsePlan}

@@ -95,3 +95,4 @@ CREATE POLICY "Users can delete own sets" ON public.workout_sets
 
 
 
+
